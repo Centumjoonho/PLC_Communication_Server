@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37012.4 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RO_Server_Rebuild_2", "RO_Server_Rebuild_2\RO_Server_Rebuild_2.csproj", "{66A69CC7-5CB5-4BC0-B174-E448E343B7FE}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{66A69CC7-5CB5-4BC0-B174-E448E343B7FE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{66A69CC7-5CB5-4BC0-B174-E448E343B7FE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{66A69CC7-5CB5-4BC0-B174-E448E343B7FE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{66A69CC7-5CB5-4BC0-B174-E448E343B7FE}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {938E3AF7-C1F8-49B5-BC5A-A17D29DDEF72}
+	EndGlobalSection
+EndGlobal
