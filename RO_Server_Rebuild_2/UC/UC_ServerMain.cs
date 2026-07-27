@@ -16,11 +16,14 @@ namespace RO_Server_Rebuild_2.UC
 {
     public partial class UC_ServerMain : UserControl, IServerMainView
     {
-       
+        private bool serverRunning;
+        private bool collectRunning;
+
         public UC_ServerMain()
         {
             InitializeComponent();
             InitializeView();
+            btnCollectStart.Enabled = false;
         }
 
         public event EventHandler ServerToggleRequested;
@@ -51,10 +54,17 @@ namespace RO_Server_Rebuild_2.UC
             }
 
             btnServerStart.Text = running ? "서버 정지" : "서버 시작";
-            lblApiState.Text = running ? "서버 실행" : "서버 정지";
-            lblApiState.ForeColor = running ? Color.White : Color.Black;
-            lblApiState.BackColor =running ? Color.FromArgb(0, 128, 64) : Color.LightGray;
 
+            lblApiState.Text = running ? "서버 실행" : "서버 정지";
+            
+            lblApiState.ForeColor = running ? Color.White : Color.Black;
+            
+            lblApiState.BackColor =running ? Color.FromArgb(0, 128, 64) : Color.LightGray;
+            
+            btnCollectStart.Enabled = running;
+
+            
+            serverRunning = running;
         }
 
         public void SetCollectRunning(bool running)
@@ -71,6 +81,9 @@ namespace RO_Server_Rebuild_2.UC
             lblRepeatState.ForeColor = running ? Color.White : Color.Black;
 
             lblRepeatState.BackColor = running ? Color.FromArgb(0, 128, 64) : Color.LightGray;
+
+
+            collectRunning = running;
         }
 
         public void ShowCollectedData(IList<PlcData> dataList)

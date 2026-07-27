@@ -1,4 +1,5 @@
-﻿using RO_Server_Rebuild_2.Base;
+﻿using RO_Server_Rebuild_2.Api;
+using RO_Server_Rebuild_2.Base;
 using RO_Server_Rebuild_2.Database;
 using RO_Server_Rebuild_2.Views;
 using System;
@@ -13,8 +14,11 @@ using System.Windows.Forms;
 
 namespace RO_Server_Rebuild_2.UC
 {
-    public partial class UC_AdminSettings : UserControl ,IDbSettingsView
+    public partial class UC_AdminSettings : UserControl ,IDbSettingsView , IApiSettingsView
     {
+        private bool plcCollectRunning;
+        private bool apiServerRunning;
+
         public UC_AdminSettings()
         {
             InitializeComponent();
@@ -22,7 +26,9 @@ namespace RO_Server_Rebuild_2.UC
 
         public event EventHandler DbTestRequested;
         public event EventHandler DbApplyRequested;
-        
+        public event EventHandler ApiTestRequested;
+        public event EventHandler ApiApplyRequested;
+
         // PLC 수집중에는 수정 불가 인터록
         public void SetPlcCollectRunning(bool running)
         {
@@ -33,8 +39,31 @@ namespace RO_Server_Rebuild_2.UC
                 return;
             }
 
-            dbPanel.Enabled = !running;
-            apiPanel.Enabled = !running;
+            plcCollectRunning = running;
+
+            // DB 설정은 PLC 수집 중일 때만 잠금
+            dbPanel.Enabled = !plcCollectRunning;
+
+            // API 설정은 PLC 수집 중이거나 API 서버 실행 중이면 잠금
+            apiPanel.Enabled = !plcCollectRunning && !apiServerRunning;
+        }
+        // API 서버 실행 중에는 API Port와 API Key를 변경할 수 없음
+        public void SetApiServerRunning(bool running)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => SetApiServerRunning(running)));
+
+                return;
+            }
+
+            apiServerRunning = running;
+
+            // DB 설정은 PLC 수집 중일 때만 잠금
+            dbPanel.Enabled = !plcCollectRunning;
+
+            // API 설정은 PLC 수집 중이거나 API 서버 실행 중이면 잠금
+            apiPanel.Enabled = !plcCollectRunning && !apiServerRunning;
         }
 
         public void ShowDbSetting(DbSettings settings)
@@ -99,12 +128,12 @@ namespace RO_Server_Rebuild_2.UC
 
         private void btnApiTest_Click(object sender, EventArgs e)
         {
-
+            ApiTestRequested?.Invoke(this, EventArgs.Empty);
         }
 
         private void btnApiApply_Click(object sender, EventArgs e)
         {
-
+            ApiApplyRequested?.Invoke(this, EventArgs.Empty);
         }
 
         public void ShowInfo(string message)
@@ -146,6 +175,61 @@ namespace RO_Server_Rebuild_2.UC
 
             btnDbTest.Enabled = enabled;
             btnDbApply.Enabled = enabled;
+        }
+
+        public bool TryGetApiSettings(out ApiSettings apiSettings, out string errorMessage)
+        {
+            apiSettings = null;
+            errorMessage = string.Empty;
+
+            int apiPort;
+
+            if(!int.TryParse(txtApiPort.Text.Trim(),out apiPort))
+            {
+                errorMessage = "API Port는 숫자로 입력하세요.";
+
+                return false;
+            }
+
+            apiSettings = new ApiSettings
+            {
+                Port = apiPort,
+                ApiKey = txtApiKey.Text.Trim(),
+            };
+            return true;
+        }
+
+        public void ShowApiSettings(ApiSettings apiSettings)
+        {
+            if(apiSettings == null)
+            {
+                return ;
+            }
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => ShowApiSettings(apiSettings)));
+
+                return;
+            }
+
+            txtApiPort.Text = apiSettings.Port.ToString();
+            txtApiKey.Text = apiSettings.ApiKey;
+        }
+
+        public void SetApiOperationEnabled(bool enabled)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => SetApiOperationEnabled(enabled)));
+
+                return;
+
+            }
+
+            btnApiTest.Enabled = enabled;
+            btnApiApply.Enabled = enabled;
+            
         }
     }
 }

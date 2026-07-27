@@ -32,8 +32,8 @@
             this.menuAdmin = new System.Windows.Forms.ToolStripMenuItem();
             this.menuPlcRegister = new System.Windows.Forms.ToolStripMenuItem();
             this.menuLogViewer = new System.Windows.Forms.ToolStripMenuItem();
-            this.mainPanel = new System.Windows.Forms.Panel();
             this.menuAdminSetting = new System.Windows.Forms.ToolStripMenuItem();
+            this.mainPanel = new System.Windows.Forms.Panel();
             this.menuStrip1.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -60,16 +60,23 @@
             // menuPlcRegister
             // 
             this.menuPlcRegister.Name = "menuPlcRegister";
-            this.menuPlcRegister.Size = new System.Drawing.Size(180, 22);
+            this.menuPlcRegister.Size = new System.Drawing.Size(122, 22);
             this.menuPlcRegister.Text = "설비등록";
             this.menuPlcRegister.Click += new System.EventHandler(this.menuPlcRegister_Click);
             // 
             // menuLogViewer
             // 
             this.menuLogViewer.Name = "menuLogViewer";
-            this.menuLogViewer.Size = new System.Drawing.Size(180, 22);
+            this.menuLogViewer.Size = new System.Drawing.Size(122, 22);
             this.menuLogViewer.Text = "통합로그";
             this.menuLogViewer.Click += new System.EventHandler(this.menuLogViewer_Click);
+            // 
+            // menuAdminSetting
+            // 
+            this.menuAdminSetting.Name = "menuAdminSetting";
+            this.menuAdminSetting.Size = new System.Drawing.Size(122, 22);
+            this.menuAdminSetting.Text = "설정";
+            this.menuAdminSetting.Click += new System.EventHandler(this.menuAdminSetting_Click);
             // 
             // mainPanel
             // 
@@ -79,13 +86,6 @@
             this.mainPanel.Name = "mainPanel";
             this.mainPanel.Size = new System.Drawing.Size(800, 426);
             this.mainPanel.TabIndex = 2;
-            // 
-            // menuAdminSetting
-            // 
-            this.menuAdminSetting.Name = "menuAdminSetting";
-            this.menuAdminSetting.Size = new System.Drawing.Size(180, 22);
-            this.menuAdminSetting.Text = "설정";
-            this.menuAdminSetting.Click += new System.EventHandler(this.menuAdminSetting_Click);
             // 
             // MainForm
             // 
@@ -99,6 +99,7 @@
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "RO Sever System";
             this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
+            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.MainForm_FormClosing);
             this.menuStrip1.ResumeLayout(false);
             this.menuStrip1.PerformLayout();
             this.ResumeLayout(false);

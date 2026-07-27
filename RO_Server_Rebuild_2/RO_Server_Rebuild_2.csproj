@@ -78,6 +78,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Api\ApiHandler.cs" />
+    <Compile Include="Api\ApiServer.cs" />
+    <Compile Include="Api\ApiSettings.cs" />
     <Compile Include="Base\Reference.cs" />
     <Compile Include="Database\DbSettings.cs" />
     <Compile Include="Database\PlcDb.cs" />
@@ -92,14 +95,18 @@
     <Compile Include="Models\PlcData.cs" />
     <Compile Include="Models\PlcMaster.cs" />
     <Compile Include="Plc\PlcReader.cs" />
+    <Compile Include="Presenters\ApiSettingsPresenter.cs" />
     <Compile Include="Presenters\DbSettingsPresenter.cs" />
     <Compile Include="Presenters\PlcRegisterPresenter.cs" />
+    <Compile Include="Presenters\ServerMainPresenter.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Services\ApiSettingsService.cs" />
     <Compile Include="Services\DbSettingsService.cs" />
     <Compile Include="Services\LogService.cs" />
     <Compile Include="Services\PlcRegisterService.cs" />
     <Compile Include="Services\ServerMainService.cs" />
+    <Compile Include="Store\PlcDataStore.cs" />
     <Compile Include="UC\UC_AdminSettings.cs">
       <SubType>UserControl</SubType>
     </Compile>
@@ -124,6 +131,7 @@
     <Compile Include="UC\UC_ServerMain.Designer.cs">
       <DependentUpon>UC_ServerMain.cs</DependentUpon>
     </Compile>
+    <Compile Include="Views\IApiSettingsView.cs" />
     <Compile Include="Views\IDbSettingsView.cs" />
     <Compile Include="Views\IPlcRegisterView.cs" />
     <Compile Include="Views\IServerMainView.cs" />
@@ -168,9 +176,6 @@
   <ItemGroup>
     <Content Include="Guide.txt" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Api\" />
-    <Folder Include="Store\" />
-  </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
