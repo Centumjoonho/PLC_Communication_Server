@@ -105,6 +105,7 @@
     <Compile Include="Services\DbSettingsService.cs" />
     <Compile Include="Services\LogService.cs" />
     <Compile Include="Services\PlcRegisterService.cs" />
+    <Compile Include="Services\RunRateService.cs" />
     <Compile Include="Services\ServerMainService.cs" />
     <Compile Include="Store\PlcDataStore.cs" />
     <Compile Include="UC\UC_AdminSettings.cs">

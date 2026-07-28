@@ -29,6 +29,61 @@ namespace RO_Server_Rebuild_2.UC
         public event EventHandler ApiTestRequested;
         public event EventHandler ApiApplyRequested;
 
+
+
+        private void btnBack_Click(object sender, EventArgs e)
+        {
+            Reference.LoadUserControls(Reference.Instance.MainPanel, Reference.Instance.UC_ServerMain);
+        }
+
+        private void btnDbTest_Click(object sender, EventArgs e)
+        {
+            DbTestRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void btnDbApply_Click(object sender, EventArgs e)
+        {
+            DbApplyRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void btnApiTest_Click(object sender, EventArgs e)
+        {
+            ApiTestRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void btnApiApply_Click(object sender, EventArgs e)
+        {
+            ApiApplyRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void ShowInfo(string message)
+        {
+            if (IsDisposed || Disposing)
+            {
+                return;
+            }
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => ShowInfo(message)));
+
+                return;
+            }
+            MessageBox.Show(this, message, "알림", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        public void ShowError(string message)
+        {
+            if (IsDisposed || Disposing)
+            {
+                return;
+            }
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => ShowError(message)));
+                return;
+            }
+            MessageBox.Show(this, message, "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+
         // PLC 수집중에는 수정 불가 인터록
         public void SetPlcCollectRunning(bool running)
         {
@@ -66,103 +121,9 @@ namespace RO_Server_Rebuild_2.UC
             apiPanel.Enabled = !plcCollectRunning && !apiServerRunning;
         }
 
-        public void ShowDbSetting(DbSettings settings)
-        {
-            if (settings == null) { return; }
 
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(()=> ShowDbSetting(settings)));
 
-                return;
-            }
 
-            txtDbServer.Text = settings.Server;
-            txtDbPort.Text = settings.Port.ToString();
-            txtDbName.Text = settings.DatabaseName;
-            txtDbUserId.Text = settings.UserId;
-            txtDbPassword.Text = settings.Password;
-        }
-
-        public bool TryGetDbSetting(out DbSettings settings, out string errorMessage)
-        {
-            settings = null;
-            errorMessage = string.Empty;
-
-            int _port;
-
-            if(!int.TryParse(txtDbPort.Text.Trim(), out _port)){
-
-                errorMessage = "DB Port는 숫자로 입력하세요";
-                
-                return false;
-            }
-            
-            settings = new DbSettings { 
-
-                Server = txtDbServer.Text.Trim(),
-                Port = _port,
-                DatabaseName =txtDbName.Text.Trim(),
-                UserId =txtDbUserId.Text.Trim(),
-                Password =txtDbPassword.Text
-
-            };
-
-            return true;
-        }
-
-        private void btnBack_Click(object sender, EventArgs e)
-        {
-            Reference.LoadUserControls(Reference.Instance.MainPanel, Reference.Instance.UC_ServerMain);
-        }
-
-        private void btnDbTest_Click(object sender, EventArgs e)
-        {
-            DbTestRequested?.Invoke(this, EventArgs.Empty);
-        }
-
-        private void btnDbApply_Click(object sender, EventArgs e)
-        {
-            DbApplyRequested?.Invoke(this, EventArgs.Empty);
-        }
-
-        private void btnApiTest_Click(object sender, EventArgs e)
-        {
-            ApiTestRequested?.Invoke(this, EventArgs.Empty);
-        }
-
-        private void btnApiApply_Click(object sender, EventArgs e)
-        {
-            ApiApplyRequested?.Invoke(this, EventArgs.Empty);
-        }
-
-        public void ShowInfo(string message)
-        {
-            if(IsDisposed || Disposing)
-            {
-                return;
-            }
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(() => ShowInfo(message)));
-                
-                return;
-            }
-            MessageBox.Show(this, message, "알림", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-        public void ShowError(string message)
-        {
-            if(IsDisposed || Disposing)
-            {
-                return;
-            }
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(() => ShowError(message)));
-                return;
-            }
-            MessageBox.Show(this, message, "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
         // 중복 클릭 방지 함수
         public void SetOperationEnabled(bool enabled)
         {
@@ -176,7 +137,66 @@ namespace RO_Server_Rebuild_2.UC
             btnDbTest.Enabled = enabled;
             btnDbApply.Enabled = enabled;
         }
+        public void SetApiOperationEnabled(bool enabled)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => SetApiOperationEnabled(enabled)));
 
+                return;
+
+            }
+
+            btnApiTest.Enabled = enabled;
+            btnApiApply.Enabled = enabled;
+
+        }
+ 
+        public bool TryGetDbSetting(out DbSettings settings, out string errorMessage)
+        {
+            settings = null;
+            errorMessage = string.Empty;
+
+            int _port;
+
+            if (!int.TryParse(txtDbPort.Text.Trim(), out _port))
+            {
+
+                errorMessage = "DB Port는 숫자로 입력하세요";
+
+                return false;
+            }
+
+            settings = new DbSettings
+            {
+
+                Server = txtDbServer.Text.Trim(),
+                Port = _port,
+                DatabaseName = txtDbName.Text.Trim(),
+                UserId = txtDbUserId.Text.Trim(),
+                Password = txtDbPassword.Text
+
+            };
+
+            return true;
+        }
+        public void ShowDbSetting(DbSettings settings)
+        {
+            if (settings == null) { return; }
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => ShowDbSetting(settings)));
+
+                return;
+            }
+
+            txtDbServer.Text = settings.Server;
+            txtDbPort.Text = settings.Port.ToString();
+            txtDbName.Text = settings.DatabaseName;
+            txtDbUserId.Text = settings.UserId;
+            txtDbPassword.Text = settings.Password;
+        }
         public bool TryGetApiSettings(out ApiSettings apiSettings, out string errorMessage)
         {
             apiSettings = null;
@@ -217,19 +237,6 @@ namespace RO_Server_Rebuild_2.UC
             txtApiKey.Text = apiSettings.ApiKey;
         }
 
-        public void SetApiOperationEnabled(bool enabled)
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(() => SetApiOperationEnabled(enabled)));
-
-                return;
-
-            }
-
-            btnApiTest.Enabled = enabled;
-            btnApiApply.Enabled = enabled;
-            
-        }
+      
     }
 }

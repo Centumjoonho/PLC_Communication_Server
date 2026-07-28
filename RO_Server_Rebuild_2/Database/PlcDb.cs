@@ -247,6 +247,170 @@ namespace RO_Server_Rebuild_2.Database
             WHERE plc_code=@plc_code
               AND work_date=@work_date";
 
+        // PLC 최신 상태 저장
+        public void SaveLatest(PlcData data)
+        {
+            if (data == null)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
 
+            using (MySqlConnection conn = CreateConnection())
+            using (MySqlCommand cmd = new MySqlCommand(SqlSaveLatest, conn))
+            {
+                cmd.Parameters.AddWithValue("@plc_code", data.PlcCode);
+                cmd.Parameters.AddWithValue("@plc_name", data.PlcName);
+                cmd.Parameters.AddWithValue("@receive_data", data.ReceiveData);
+                cmd.Parameters.AddWithValue("@status_text", data.Status);
+                cmd.Parameters.AddWithValue("@total_seconds", data.TotalSeconds);
+                cmd.Parameters.AddWithValue("@rate", data.Rate);
+                cmd.Parameters.AddWithValue("@receive_time", data.ReceiveTime);
+                cmd.Parameters.AddWithValue("@client_ip", "SERVER");
+
+                conn.Open();
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // PLC 일별·시간대별 가동시간 저장
+        public void SaveDaily(PlcData data, DateTime workDate)
+        {
+            if (data == null)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
+
+            using (MySqlConnection conn = CreateConnection())
+            using (MySqlCommand cmd = new MySqlCommand(SqlSaveDaily, conn))
+            {
+                cmd.Parameters.AddWithValue("@plc_code", data.PlcCode);
+                cmd.Parameters.AddWithValue("@work_date", workDate.Date);
+                cmd.Parameters.AddWithValue("@total_seconds", data.TotalSeconds);
+                cmd.Parameters.AddWithValue("@receive_time", data.ReceiveTime);
+
+                for (int hour = 0; hour < 24; hour++)
+                {
+                    int second = 0;
+
+                    if (data.HourSeconds != null && hour < data.HourSeconds.Length)
+                    {
+                        second = data.HourSeconds[hour];
+                    }
+
+                    cmd.Parameters.AddWithValue("@hat_" + hour.ToString("00"), second);
+                }
+
+                conn.Open();
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // PLC 장애 이력 저장
+        public void SaveHistory(PlcData data)
+        {
+            if (data == null)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
+
+            using (MySqlConnection conn = CreateConnection())
+            using (MySqlCommand cmd = new MySqlCommand(SqlSaveHistory, conn))
+            {
+                cmd.Parameters.AddWithValue("@message_id", Guid.NewGuid().ToString("N"));
+                cmd.Parameters.AddWithValue("@plc_code", data.PlcCode);
+                cmd.Parameters.AddWithValue("@receive_data", data.ReceiveData);
+                cmd.Parameters.AddWithValue("@total_seconds", data.TotalSeconds);
+                cmd.Parameters.AddWithValue("@rate", data.Rate);
+                cmd.Parameters.AddWithValue("@raw_frame", data.ReceiveData ?? string.Empty);
+                cmd.Parameters.AddWithValue("@receive_time", data.ReceiveTime);
+
+                conn.Open();
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // API 응답용 PLC 최신 상태 목록 조회
+        public List<PlcData> ReadLatestList()
+        {
+            List<PlcData> plcDataList = new List<PlcData>();
+
+            using (MySqlConnection conn = CreateConnection())
+            using (MySqlCommand cmd = new MySqlCommand(SqlReadLatestList, conn))
+            {
+                conn.Open();
+
+                using (MySqlDataReader reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        PlcData data = new PlcData
+                        {
+                            PlcCode = reader.IsDBNull(0) ? string.Empty : reader.GetString(0),
+                            PlcName = reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
+                            PlcIp = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                            PlcPort = reader.IsDBNull(3) ? 502 : reader.GetInt32(3),
+                            MemoryAddress = reader.IsDBNull(4) ? "30" : reader.GetString(4),
+                            ReceiveData = reader.IsDBNull(5) ? string.Empty : reader.GetString(5),
+                            Status = reader.IsDBNull(6) ? "WAIT" : reader.GetString(6),
+                            TotalSeconds = reader.IsDBNull(7) ? 0 : reader.GetInt32(7),
+                            Rate = reader.IsDBNull(8) ? 0 : reader.GetDouble(8),
+                            ReceiveTime = reader.IsDBNull(9) ? DateTime.MinValue : reader.GetDateTime(9)
+                        };
+
+                        DateTime workDate = GetWorkDate(data.ReceiveTime);
+
+                        data.HourSeconds = ReadTodaySeconds(data.PlcCode, workDate);
+
+                        plcDataList.Add(data);
+                    }
+                }
+            }
+
+            return plcDataList;
+        }
+
+        // PLC의 영업일 기준 시간대별 가동초 조회
+        public int[] ReadTodaySeconds(string plcCode, DateTime workDate)
+        {
+            int[] hourSeconds = new int[24];
+
+            using (MySqlConnection conn = CreateConnection())
+            using (MySqlCommand cmd = new MySqlCommand(SqlReadTodaySeconds, conn))
+            {
+                cmd.Parameters.AddWithValue("@plc_code", plcCode);
+                cmd.Parameters.AddWithValue("@work_date", workDate.Date);
+
+                conn.Open();
+
+                using (MySqlDataReader reader = cmd.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        for (int hour = 0; hour < 24; hour++)
+                        {
+                            hourSeconds[hour] = reader.IsDBNull(hour) ? 0 : reader.GetInt32(hour);
+                        }
+                    }
+                }
+            }
+
+            return hourSeconds;
+        }
+
+        // 오전 8시를 기준으로 영업일 계산
+        private DateTime GetWorkDate(DateTime time)
+        {
+            if (time == DateTime.MinValue)
+            {
+                return DateTime.Today;
+            }
+
+            if (time.Hour < 8)
+            {
+                return time.Date.AddDays(-1);
+            }
+
+            return time.Date;
+        }
     }
 }

@@ -23,6 +23,31 @@ namespace RO_Server_Rebuild_2.Presenters
 
             this.dbView.DbTestRequested += OnDbTestRequested;
             this.dbView.DbApplyRequested += OnDbApplyRequested;
+            // 프로그램 실행시 최초 적용
+            ApplyInitialDbSetting();
+        }
+        private void ApplyInitialDbSetting()
+        {
+            DbSettings settings;
+            string errorMessage;
+
+            bool inputSuccess = dbView.TryGetDbSetting(out settings, out errorMessage);
+
+            if (!inputSuccess)
+            {
+                LogService.Error("기본 DB 설정 입력 오류 : " + errorMessage);
+                return;
+            }
+
+            bool applySuccess = dbService.ApplyDbSetting(settings, out errorMessage);
+
+            if (!applySuccess)
+            {
+                LogService.Error("기본 DB 설정 적용 실패 : " + errorMessage);
+                return;
+            }
+
+            LogService.Log("기본 DB 설정이 자동으로 적용되었습니다.");
         }
 
         private async void OnDbTestRequested(object sender, EventArgs e)
