@@ -1,6 +1,7 @@
 ﻿using RO_Server_Rebuild_2.Models;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text;
@@ -15,9 +16,33 @@ namespace RO_Server_Rebuild_2.Plc
         private const int PlcConnectTimeoutMs = 300;
         private const int PlcWriteTimeoutMs = 300;
         private const int PlcReadTimeoutMs = 400;
+
+        // 현재 PLC Frame에서 읽는 Register 개수
+        private const int RegisterCount = 2;
+
+        // Register 2개이므로 응답 데이터는 4바이트
+        private const int ExpectedDataByteCount = RegisterCount * 2;
+
         // PLC 데이터를 읽는 메서드
-        public async Task<PlcData> ReadPlcData(PlcMaster master)
+        public async Task<PlcData> ReadPlcData(PlcMaster master , CancellationToken cancellationToken = default(CancellationToken))
         {
+
+            if (master == null)
+            {
+                throw new ArgumentNullException(nameof(master));
+            }
+
+            if (string.IsNullOrWhiteSpace(master.PlcIp))
+            {
+                throw new ArgumentException("PLC IP가 없습니다.", nameof(master));
+            }
+
+            if (master.PlcPort <= 0 || master.PlcPort > 65535)
+            {
+                throw new ArgumentException("PLC Port가 올바르지 않습니다.", nameof(master));
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             byte[] frame = MakeReadFrame(master);
 
@@ -25,60 +50,144 @@ namespace RO_Server_Rebuild_2.Plc
             {
 
                 Task connectTask = client.ConnectAsync(master.PlcIp, master.PlcPort);
+                Task connectTimeoutTask = Task.Delay(PlcConnectTimeoutMs, cancellationToken);
 
-                if (await Task.WhenAny(connectTask, Task.Delay(PlcConnectTimeoutMs)) != connectTask)
+                if (await Task.WhenAny(connectTask, connectTimeoutTask) != connectTask)
                 {
-                    throw new Exception("PLC 연결 시간이 초과되었습니다.");
+                    cancellationToken.ThrowIfCancellationRequested();
+                    throw new TimeoutException("PLC 연결 시간이 초과되었습니다.");
                 }
+                // ConnectAsync 내부에서 발생한 SocketException 확인
                 await connectTask;
 
                 using (NetworkStream stream = client.GetStream())
                 {
 
-                    Task writeTask = stream.WriteAsync(frame, 0, frame.Length);
+                    Task writeTask = stream.WriteAsync(frame, 0, frame.Length, cancellationToken);
+                    Task writeTimeoutTask = Task.Delay(PlcWriteTimeoutMs, cancellationToken);
 
-                    if (await Task.WhenAny(writeTask, Task.Delay(PlcWriteTimeoutMs)) != writeTask)
+
+                    if (await Task.WhenAny(writeTask, writeTimeoutTask) != writeTask)
                     {
-                        throw new Exception("PLC 쓰기 시간이 초과되었습니다.");
+                        cancellationToken.ThrowIfCancellationRequested();
+                        throw new TimeoutException("PLC 쓰기 시간이 초과되었습니다.");
                     }
-                    
+                    // WriteAsync 내부 예외 확인
                     await writeTask;
 
-                    // receive = read  : 도착 프레임 길이 점검 추가
-                    ///////////////////////////////////////////////////////////////////////
+                   
 
-                    byte[] buffer = new byte[100];
+                    byte[] buffer = new byte[260];
 
-                    int totalLength = 0;
-                    int requiredLength = 13;
+                    // PLC 응답 전체에 하나의 읽기 제한시간 적용
+                    Task readTimeoutTask = Task.Delay(PlcReadTimeoutMs, cancellationToken);
 
-                    Task timeoutTask = Task.Delay(PlcReadTimeoutMs);
+                    // MBAP Header 7바이트 + Function Code 1바이트 + Byte Count 1바이트
+                    int totalLength = await ReadExactAsync(stream, buffer, 0, 9, readTimeoutTask, cancellationToken);
 
-                    while (totalLength < requiredLength)
-                    {
-                        Task<int> readTask = stream.ReadAsync(buffer, totalLength, requiredLength - totalLength);
+                    // Function Code와 데이터 길이 확인
+                    int dataByteCount = ValidateResponseHeader(buffer, totalLength);
 
-                        if (await Task.WhenAny(readTask, timeoutTask) != readTask)
-                        {
-                            throw new TimeoutException("PLC 응답 전체를 읽는 시간이 초과 되었습니다.");
-                        }
+                    // 실제로 받아야 하는 전체 응답 길이
+                    int requiredLength = 9 + dataByteCount;
 
-                        int readLength = await readTask;
+                    totalLength = await ReadExactAsync(stream, buffer, totalLength, requiredLength, readTimeoutTask, cancellationToken);
 
-                        if (readLength == 0)
-                        {
-                            throw new Exception("PLC가 응답 전송 중 연결을 종료했습니다");
-                        }
-
-                        totalLength += readLength;
-                    }
 
                     return MakeData(master, buffer, totalLength);
 
-                    ///////////////////////////////////////////////////////////////////////
                 }
 
             }
+        }
+        // requiredLength만큼 응답을 전부 받을 때까지 반복해서 읽음
+        private async Task<int> ReadExactAsync(NetworkStream stream,byte[] buffer,int currentLength,int requiredLength,Task timeoutTask,CancellationToken cancellationToken)
+        {
+            int totalLength = currentLength;
+
+            while (totalLength < requiredLength)
+            {
+                Task<int> readTask = stream.ReadAsync(
+                    buffer,
+                    totalLength,
+                    requiredLength - totalLength,
+                    cancellationToken);
+
+                if (await Task.WhenAny(readTask, timeoutTask) != readTask)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    throw new TimeoutException("PLC 응답 전체를 읽는 시간이 초과되었습니다.");
+                }
+
+                int readLength = await readTask;
+
+                if (readLength == 0)
+                {
+                    throw new Exception("PLC가 응답 전송 중 연결을 종료했습니다.");
+                }
+
+                totalLength += readLength;
+            }
+
+            return totalLength;
+        }
+
+        // 수신한 Modbus TCP 응답 Header 확인
+        private int ValidateResponseHeader(byte[] buffer, int length)
+        {
+            if (buffer == null || length < 9)
+            {
+                throw new Exception("PLC 응답 Header가 너무 짧습니다.");
+            }
+
+            // 요청 Frame의 Transaction ID가 0x0000이므로 응답도 같은 값이어야 함
+            if (buffer[0] != 0x00 || buffer[1] != 0x00)
+            {
+                throw new Exception("PLC Transaction ID가 올바르지 않습니다.");
+            }
+
+            // Modbus TCP의 Protocol ID는 0x0000
+            if (buffer[2] != 0x00 || buffer[3] != 0x00)
+            {
+                throw new Exception("PLC Protocol ID가 올바르지 않습니다.");
+            }
+
+            // 현재 요청 Frame에서 Unit ID는 0x01
+            if (buffer[6] != 0x01)
+            {
+                throw new Exception("PLC Unit ID가 올바르지 않습니다.");
+            }
+
+            // Function Code의 최상위 Bit가 1이면 Modbus 예외 응답
+            if ((buffer[7] & 0x80) != 0)
+            {
+                throw new Exception("PLC 예외 응답을 수신했습니다. Code : " + buffer[8]);
+            }
+
+            // 현재 읽기 요청은 Function Code 0x03
+            if (buffer[7] != 0x03)
+            {
+                throw new Exception("PLC Function Code가 올바르지 않습니다.");
+            }
+
+            int dataByteCount = buffer[8];
+
+            if (dataByteCount != ExpectedDataByteCount)
+            {
+                throw new Exception("PLC 응답 데이터 길이가 올바르지 않습니다. Byte Count : " + dataByteCount);
+            }
+
+            // MBAP Length는 Unit ID, Function Code, Byte Count, Data 길이의 합
+            int responseLength = (buffer[4] << 8) | buffer[5];
+            int expectedResponseLength = 3 + dataByteCount;
+
+            if (responseLength != expectedResponseLength)
+            {
+                throw new Exception("PLC MBAP Length가 올바르지 않습니다.");
+            }
+
+            return dataByteCount;
         }
         // 수신 프레임에서 data 부분만 추출
         private PlcData MakeData(PlcMaster master, byte[] buffer, int length)
@@ -108,6 +217,14 @@ namespace RO_Server_Rebuild_2.Plc
         private byte[] MakeReadFrame(PlcMaster master)
         {
             string address = string.IsNullOrWhiteSpace(master.MemoryAddress) ? "30" : master.MemoryAddress;
+
+            ushort addressValue;
+
+            if (!ushort.TryParse(address, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out addressValue))
+            {
+                throw new ArgumentException("PLC Memory Address가 올바른 16진수가 아닙니다.", nameof(master));
+            }
+
             byte[] header = new byte[]
             {
                 0x00, 0x00,   // Transaction ID
@@ -116,14 +233,18 @@ namespace RO_Server_Rebuild_2.Plc
                 0x01,         // Unit ID
                 0x03          // Function Code
             };
-            // 메모리 주소 100 이상도 반영
-            ushort addressValue = Convert.ToUInt16(address, 16);
+           
             byte[] memoryAddress = new byte[]
             {
                 (byte)(addressValue >> 8),
                 (byte)(addressValue & 0xFF)
             };
-            byte[] memorySize = new byte[] { 0x00, 0x02 };
+
+            byte[] memorySize = new byte[]
+            {
+                (byte)(RegisterCount >> 8),
+                (byte)(RegisterCount & 0xFF)
+            };
             byte[] frame = new byte[12];
 
             // 예시 : header의 0번부터 frame의 0번 위치에 header.Length개 만큼 복사해라

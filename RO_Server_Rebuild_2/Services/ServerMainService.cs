@@ -56,7 +56,7 @@ namespace RO_Server_Rebuild_2.Services
 
         }
         // PLC 목록 전체를 한 차례 수집
-        private async Task<IList<PlcData>> ReadAllPlcDataAsync(IList<PlcMaster> plcMasterList)
+        private async Task<IList<PlcData>> ReadAllPlcDataAsync(IList<PlcMaster> plcMasterList , CancellationToken cancellationToken)
         {
             
             if(plcMasterList == null || plcMasterList.Count ==0 )
@@ -73,7 +73,7 @@ namespace RO_Server_Rebuild_2.Services
                 foreach (PlcMaster plcMaster in plcMasterList)
                 {
 
-                    Task<PlcData> plcWork = ReadPlcWorker(plcMaster,plcSemaphore);
+                    Task<PlcData> plcWork = ReadPlcWorker(plcMaster,plcSemaphore , cancellationToken);
 
                     readTaskList.Add(plcWork);
                 }
@@ -86,13 +86,18 @@ namespace RO_Server_Rebuild_2.Services
            
         }
         // PLC 한 대의 오류 처리와 Semaphore 관리
-        private async Task<PlcData> ReadPlcWorker(PlcMaster plcMaster, SemaphoreSlim plcSemaphore)
+        private async Task<PlcData> ReadPlcWorker(PlcMaster plcMaster, SemaphoreSlim plcSemaphore , CancellationToken cancellationToken)
         {
-            await plcSemaphore.WaitAsync();
+            await plcSemaphore.WaitAsync(cancellationToken);
 
             try
             {
-                return await plcReader.ReadPlcData(plcMaster);
+                return await plcReader.ReadPlcData(plcMaster, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // 수집 정지 요청은 통신 오류 데이터로 바꾸지 않고 상위 반복문으로 전달
+                throw;
             }
             catch (Exception ex)
             {
@@ -207,7 +212,7 @@ namespace RO_Server_Rebuild_2.Services
                 {
                     DateTime loopStartTime = DateTime.Now;
 
-                    IList<PlcData> plcDataList = await ReadAllPlcDataAsync(plcMasterList);
+                    IList<PlcData> plcDataList = await ReadAllPlcDataAsync(plcMasterList ,cancellationToken);
                     // Plc 통신 값을 메모리에 저장 하여 필요할 때 사용
                     plcDataStore.SetCollectList(plcDataList);
 

@@ -2,6 +2,7 @@
 using RO_Server_Rebuild_2.Models;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Text;
@@ -121,6 +122,14 @@ namespace RO_Server_Rebuild_2.Services
             if (string.IsNullOrWhiteSpace(plcMaster.MemoryAddress))
             {
                 errorMessage = "Memory Address를 입력하세요.";
+                return false;
+            }
+
+            ushort memoryAddress;
+
+            if (!ushort.TryParse(plcMaster.MemoryAddress, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out memoryAddress))
+            {
+                errorMessage = "Memory Address는 0000부터 FFFF 사이의 16진수로 입력하세요.";
                 return false;
             }
 

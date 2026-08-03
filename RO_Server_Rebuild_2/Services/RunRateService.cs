@@ -77,29 +77,29 @@ namespace RO_Server_Rebuild_2.Services
         }
 
         // PLC 통신 결과가 들어오면 현재 상태만 갱신
-        public void UpdatePlcStatus(PlcData data)
+        public bool UpdatePlcStatus(PlcData plcData)
         {
-            if (data == null)
+            if (plcData == null)
             {
-                throw new ArgumentNullException(nameof(data));
+                return false;
             }
 
-            if (string.IsNullOrWhiteSpace(data.PlcCode))
+            if (string.IsNullOrWhiteSpace(plcData.PlcCode))
             {
-                throw new ArgumentException("PLC Code가 없습니다.", nameof(data));
+                return false;
             }
 
             lock (stateLock)
             {
-                // 초기화되지 않은 PLC라면 기본 상태 생성
-                if (!hourRunSecondsMap.ContainsKey(data.PlcCode))
+                // 초기화되지 않았다면 상태를 변경하지 않음
+                if (!hourRunSecondsMap.ContainsKey(plcData.PlcCode))
                 {
-                    workDates[data.PlcCode] = GetWorkDate(data.ReceiveTime);
-                    hourRunSecondsMap[data.PlcCode] = new int[HourCount];
+                    return false;
                 }
 
-                // null이나 빈 상태도 그대로 RUN이 아닌 상태로 취급
-                currentStatuses[data.PlcCode] = data.Status ?? string.Empty;
+                currentStatuses[plcData.PlcCode] = plcData.Status ?? string.Empty;
+
+                return true;
             }
         }
        
@@ -239,6 +239,15 @@ namespace RO_Server_Rebuild_2.Services
             Array.Copy(source, result, copyLength);
 
             return result;
+        }
+        public void ResetAll()
+        {
+            lock (stateLock)
+            {
+                workDates.Clear();
+                hourRunSecondsMap.Clear();
+                currentStatuses.Clear();
+            }
         }
 
 

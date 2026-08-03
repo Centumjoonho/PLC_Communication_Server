@@ -1,9 +1,5 @@
 ﻿using RO_Server_Rebuild_2.Models;
-using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace RO_Server_Rebuild_2.Store
 {
@@ -15,20 +11,57 @@ namespace RO_Server_Rebuild_2.Store
 
         public void SetCollectList(IList<PlcData> plcDataList)
         {
+            List<PlcData> newList = new List<PlcData>();
+
+            if (plcDataList != null)
+            {
+                foreach (PlcData data in plcDataList)
+                {
+                    if (data != null)
+                    {
+                        newList.Add(CopyPlcData(data));
+                    }
+                }
+            }
+
             lock (dataLock)
             {
-                collectList = plcDataList == null
-                    ? new List<PlcData>()
-                    : new List<PlcData>(plcDataList);
+                collectList = newList;
             }
         }
 
         public List<PlcData> GetCollectList()
         {
+            List<PlcData> result = new List<PlcData>();
+
             lock (dataLock)
             {
-                return new List<PlcData>(collectList);
+                foreach (PlcData data in collectList)
+                {
+                    result.Add(CopyPlcData(data));
+                }
             }
+
+            return result;
+        }
+
+        private PlcData CopyPlcData(PlcData source)
+        {
+            return new PlcData
+            {
+                PlcCode = source.PlcCode,
+                PlcName = source.PlcName,
+                PlcIp = source.PlcIp,
+                PlcPort = source.PlcPort,
+                MemoryAddress = source.MemoryAddress,
+                ReceiveData = source.ReceiveData,
+                Status = source.Status,
+                TotalSeconds = source.TotalSeconds,
+                Rate = source.Rate,
+                ReceiveTime = source.ReceiveTime,
+                HourSeconds = source.HourSeconds == null ? new int[24] : (int[])source.HourSeconds.Clone(),
+                ErrorMessage = source.ErrorMessage
+            };
         }
     }
 }

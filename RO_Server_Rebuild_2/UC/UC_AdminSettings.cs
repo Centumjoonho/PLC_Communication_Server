@@ -96,8 +96,8 @@ namespace RO_Server_Rebuild_2.UC
 
             plcCollectRunning = running;
 
-            // DB 설정은 PLC 수집 중일 때만 잠금
-            dbPanel.Enabled = !plcCollectRunning;
+            // PLC 수집 중이거나 API 서버 실행 중이면 DB 설정 잠금
+            dbPanel.Enabled = !plcCollectRunning && !apiServerRunning;
 
             // API 설정은 PLC 수집 중이거나 API 서버 실행 중이면 잠금
             apiPanel.Enabled = !plcCollectRunning && !apiServerRunning;
@@ -114,8 +114,8 @@ namespace RO_Server_Rebuild_2.UC
 
             apiServerRunning = running;
 
-            // DB 설정은 PLC 수집 중일 때만 잠금
-            dbPanel.Enabled = !plcCollectRunning;
+            // PLC 수집 중이거나 API 서버 실행 중이면 DB 설정 잠금
+            dbPanel.Enabled = !plcCollectRunning && !apiServerRunning;
 
             // API 설정은 PLC 수집 중이거나 API 서버 실행 중이면 잠금
             apiPanel.Enabled = !plcCollectRunning && !apiServerRunning;
