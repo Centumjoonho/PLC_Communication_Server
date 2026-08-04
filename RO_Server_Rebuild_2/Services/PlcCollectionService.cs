@@ -86,7 +86,7 @@ namespace RO_Server_Rebuild_2.Services
             this.dbSaveService = dbSaveService;
             this.plcDataStore = plcDataStore;
         }
-        public bool Start(out string errorMessage)
+        public bool StartCollect(out string errorMessage)
         {/*
             PrepareCollection()
             → DbSaveService.Start()
@@ -145,7 +145,7 @@ namespace RO_Server_Rebuild_2.Services
                     return false;
                 }
 
-                bool dbSaveStarted = dbSaveService.Start();
+                bool dbSaveStarted = dbSaveService.DBSaveWorkStart();
 
                 if(!dbSaveStarted)
                 {
@@ -173,7 +173,7 @@ namespace RO_Server_Rebuild_2.Services
             }
 
         }
-        public async Task<bool> StopAsync()
+        public async Task<bool> StopCollectAsync()
         {
             /* CancellationTokenSource.Cancel()
              → collectTask 종료 대기
@@ -258,7 +258,7 @@ namespace RO_Server_Rebuild_2.Services
                 try
                 {
                     // 신규 DB 저장 요청을 막고 남아 있는 저장 작업 완료 대기
-                    dbStopSuccess = await dbSaveService.StopAsync();
+                    dbStopSuccess = await dbSaveService.DBSaveWorkStopAsync();
                 }
                 catch (Exception ex)
                 {
@@ -270,8 +270,7 @@ namespace RO_Server_Rebuild_2.Services
                 lock (stateLock)
                 {
                     // 현재 정리한 실행 객체가 맞을 때만 필드 초기화
-                    if (runningTokenSource == null ||
-                        ReferenceEquals(cancellationTokenSource, runningTokenSource))
+                    if (runningTokenSource == null || ReferenceEquals(cancellationTokenSource, runningTokenSource))
                     {
                         cancellationTokenSource = null;
                         collectTask = null;
@@ -713,11 +712,21 @@ namespace RO_Server_Rebuild_2.Services
         // PLC 통신 시간과 별개로 실제 시계 기준 1초마다 가동초 계산
         private async Task RunRateLoopAsync(CancellationToken cancellationToken)
         {
+            //첫번째 가동초 계산 예정 시각
+            DateTime nextCountTime = DateTime.Now.AddSeconds(1);
+
             try
             {
                 while (!cancellationToken.IsCancellationRequested && collectRunning)
                 {
-                    await Task.Delay(LoopIntervalMs, cancellationToken);
+                    TimeSpan waitTime = nextCountTime - DateTime.Now;
+
+                    if(waitTime.TotalMilliseconds > 0)
+                    {
+                        int delayMilliseconds = (int)Math.Ceiling(waitTime.TotalMilliseconds);
+
+                        await Task.Delay(delayMilliseconds, cancellationToken);
+                    }
 
                     // 대기 중 수집이 정지됐다면 가동초를 증가시키지 않음
                     if (cancellationToken.IsCancellationRequested || !collectRunning)
@@ -725,7 +734,14 @@ namespace RO_Server_Rebuild_2.Services
                         break;
                     }
 
-                    runRateService.CountOneSecond(DateTime.Now);
+                    DateTime currentTime =DateTime.Now;
+
+                    // 시스템 지연으로 여러 초가 지난 경우 누락된 초만큼 처리
+                    while (nextCountTime <= currentTime)
+                    {
+                        runRateService.CountOneSecond(nextCountTime);
+                        nextCountTime = nextCountTime.AddSeconds(1);
+                    }
                 }
             }
             catch (OperationCanceledException)

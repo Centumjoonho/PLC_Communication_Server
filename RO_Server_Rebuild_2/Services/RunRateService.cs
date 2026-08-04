@@ -11,6 +11,7 @@ namespace RO_Server_Rebuild_2.Services
     public class RunRateService
     {
         private const int HourCount = 24;
+
         private const double OneDaySeconds = 24 * 60 * 60;
 
         private readonly object stateLock = new object();

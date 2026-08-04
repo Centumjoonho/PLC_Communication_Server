@@ -11,6 +11,9 @@ namespace RO_Server_Rebuild_2.Services
 {
     public class DbSaveService
     {
+        // DB 장애가 발생해도 저장 요청이 무제한으로 쌓이지 않도록 제한
+        private const int MaxSaveQueueCount = 500;
+     
         private readonly PlcDb plcDb;
         private readonly object stateLock = new object();
 
@@ -53,7 +56,7 @@ namespace RO_Server_Rebuild_2.Services
             }
         }
         // DB 저장 요청을 처리하는 Worker Task 시작
-        public bool Start()
+        public bool DBSaveWorkStart()
         {
             lock (stateLock)
             {
@@ -76,7 +79,7 @@ namespace RO_Server_Rebuild_2.Services
                     saveQueue.Dispose();
                 }
 
-                saveQueue = new BlockingCollection<DbSaveItem>();
+                saveQueue = new BlockingCollection<DbSaveItem>(MaxSaveQueueCount);
 
                 BlockingCollection<DbSaveItem> runningQueue = saveQueue;
 
@@ -136,7 +139,7 @@ namespace RO_Server_Rebuild_2.Services
 
         }
         // 신규 입력을 차단하고 큐에 남은 저장 작업 완료 대기
-        public async Task<bool> StopAsync()
+        public async Task<bool> DBSaveWorkStopAsync()
         {
             BlockingCollection<DbSaveItem> runningQueue;
             Task runningWorkerTask;

@@ -22,15 +22,24 @@ namespace RO_Server_Rebuild_2
         private readonly PlcDb _plcDb;
         private readonly PlcReader _plcReader;
         private readonly ApiServer _apiServer;
+        private readonly ApiHandler _apiHandler;
         private readonly PlcDataStore _plcDataStore;
+        private readonly RunRateService _runRateService;
+        private readonly DbSaveService _dbSaveService;
+
         private readonly DbSettingsService _dbSettingsService;
         private readonly DbSettingsPresenter _dbSettingsPresenter;
+
         private readonly PlcRegisterService _plcRegisterService;
         private readonly PlcRegisterPresenter _plcRegisterPresenter;
+        
         private readonly ServerMainService _serverMainService;
         private readonly ServerMainPresenter _serverMainPresenter;
+       
         private readonly ApiSettingsService _apiSettingsService;
         private readonly ApiSettingsPresenter _apiSettingsPresenter;
+       
+        private readonly PlcCollectionService _plcCollectionService;
 
         public MainForm()
         {
@@ -45,22 +54,34 @@ namespace RO_Server_Rebuild_2
             Reference.Instance.UC_LogViewer = new UC_LogViewer();
             Reference.Instance.UC_AdminSettings = new UC_AdminSettings();
 
-            // Service  와 Presenter 생성 및 연결
+            // DB 설정
             _dbSettingsService = new DbSettingsService();
-            _dbSettingsPresenter = new DbSettingsPresenter(Reference.Instance.UC_AdminSettings, _dbSettingsService);
-
+            _dbSettingsPresenter = new DbSettingsPresenter( Reference.Instance.UC_AdminSettings,_dbSettingsService);
+            
+            // PLC 와 데이터 저장 구성
             _plcDb = new PlcDb(_dbSettingsService);
             _plcReader = new PlcReader();
-            _apiServer = new ApiServer();
             _plcDataStore = new PlcDataStore();
+            _runRateService = new RunRateService();
+            _dbSaveService = new DbSaveService(_plcDb);
 
-            _plcRegisterService = new PlcRegisterService(_plcDb);
-            _plcRegisterPresenter =new PlcRegisterPresenter(Reference.Instance.UC_PlcRegister, _plcRegisterService);
-
+            // PLC 수집 Service
+            _plcCollectionService = new PlcCollectionService(_plcDb, _plcReader, _runRateService, _dbSaveService, _plcDataStore);
+            
+            // API 설정
             _apiSettingsService = new ApiSettingsService();
             _apiSettingsPresenter = new ApiSettingsPresenter(Reference.Instance.UC_AdminSettings, _apiSettingsService);
 
-            _serverMainService = new ServerMainService(_plcDb, _plcReader, _apiServer , _plcDataStore, _apiSettingsService);
+            // API 요청 처리기와 서버
+            _apiHandler = new ApiHandler(_plcDb, _apiSettingsService, _plcDataStore, () => _plcCollectionService.IsRunning());
+            _apiServer = new ApiServer(_apiHandler);
+            
+            // PLC 등록
+            _plcRegisterService = new PlcRegisterService(_plcDb);
+            _plcRegisterPresenter =new PlcRegisterPresenter(Reference.Instance.UC_PlcRegister, _plcRegisterService);
+
+            // 서버 메인
+            _serverMainService = new ServerMainService( _apiServer , _apiSettingsService , _plcCollectionService);
             _serverMainPresenter = new ServerMainPresenter(Reference.Instance.UC_ServerMain, _serverMainService);
   
 
@@ -80,8 +101,6 @@ namespace RO_Server_Rebuild_2
             LogService.Log("통합 로그창이 초기화되었습니다.");
 
         }
-
-    
 
         private void AddUserControl(UserControl userControl) { 
             
