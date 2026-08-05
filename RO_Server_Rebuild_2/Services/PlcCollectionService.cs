@@ -490,6 +490,7 @@ namespace RO_Server_Rebuild_2.Services
             }
 
             int failureCount;
+
             bool saveHistory = false;
 
             lock (failureStateLock)
@@ -564,9 +565,7 @@ namespace RO_Server_Rebuild_2.Services
                 }
 
                 recovered =
-                    failureState.FailureCount > 0 ||
-                    failureState.SkipUntil > DateTime.MinValue ||
-                    failureState.FailureConfirmed;
+                    failureState.FailureCount > 0 || failureState.SkipUntil > DateTime.MinValue || failureState.FailureConfirmed;
 
                 failureStates.Remove(plcCode);
             }
