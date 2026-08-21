@@ -34,6 +34,9 @@ namespace RO_Server_Rebuild_2.Api
         private const int ClientReadTimeoutMs = 3000;
         private const int MaxBodySize = 1024 * 1024;
 
+        private const int MaxConcurrentClientCount = 20;
+        private readonly SemaphoreSlim clientSemaphore = new SemaphoreSlim(MaxConcurrentClientCount, MaxConcurrentClientCount);
+
         public ApiServer(ApiHandler apiHandler)
         {
             if(apiHandler == null)
@@ -165,7 +168,7 @@ namespace RO_Server_Rebuild_2.Api
                     try
                     {
                         // 클라이언트가 접속할 때까지 비동기로 대기
-                        TcpClient client =await runningTcpListener.AcceptTcpClientAsync();
+                        TcpClient client = await runningTcpListener.AcceptTcpClientAsync();
 
                         // 접속한 직후 서버 정지가 요청 되었다면 처리하지 않고 종료
                         if(cancellationToken.IsCancellationRequested)
@@ -244,11 +247,17 @@ namespace RO_Server_Rebuild_2.Api
             // clientList에서 제거하고 소켓 종료
 
             string clientIp = string.Empty;
+            bool semaphoreEntered = false;
 
             JavaScriptSerializer jsonSerializer = new JavaScriptSerializer();
 
             try
             {
+                // 동시에 최대 20개 Client만 요청 처리
+                await clientSemaphore.WaitAsync(cancellationToken);
+                
+                semaphoreEntered = true;
+
                 // 접속한 클라이언트 IP 확인
                 IPEndPoint remoteEndPoint = client.Client.RemoteEndPoint as IPEndPoint;
 
@@ -258,27 +267,19 @@ namespace RO_Server_Rebuild_2.Api
                 }
 
                 // HTTP 요청에서 JSON 본문 읽기
-                string requestBody = await ReadHttpBodyAsync(
-                    client,
-                    cancellationToken);
+                string requestBody = await ReadHttpBodyAsync(client,cancellationToken);
 
                 // JSON 본문을 ApiMessage 객체로 변환
-                ApiMessage request =
-                    jsonSerializer.Deserialize<ApiMessage>(requestBody);
+                ApiMessage request = jsonSerializer.Deserialize<ApiMessage>(requestBody);
 
                 // 요청 종류와 API Key를 확인하여 응답 생성
-                ApiMessage response =
-                    apiHandler.CreateResponse(request, clientIp);
+                ApiMessage response = apiHandler.CreateResponse(request, clientIp);
 
                 // 응답 객체를 JSON 문자열로 변환
-                string responseJson =
-                    jsonSerializer.Serialize(response);
+                string responseJson = jsonSerializer.Serialize(response);
 
                 // 클라이언트에 HTTP 응답 전송
-                await WriteHttpResponseAsync(
-                    client,
-                    responseJson,
-                    cancellationToken);
+                await WriteHttpResponseAsync(client , responseJson , cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -326,6 +327,11 @@ namespace RO_Server_Rebuild_2.Api
                 }
                 catch
                 {
+                }
+                // 실제로 자리를 받은 경우에만 반환
+                if (semaphoreEntered)
+                {
+                    clientSemaphore.Release();
                 }
             }
         }

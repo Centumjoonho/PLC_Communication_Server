@@ -148,12 +148,9 @@ namespace RO_Server_Rebuild_2.Services
                     LogService.Error("API 서버 정지 과정에서 PLC 통신 정리가 정상적으로 완료되지 않았습니다.");
                 }
 
-                // PLC 정지 결과와 관계없이 API 서버 정지 진행
-                if (apiServer.IsRunning)
-                {
-                    serverStopped = await apiServer.StopListeningAsync();
-                }
-
+                // 서버 통신 정지 : 비정상 종료시에도 남은 Listener와 Client까지 정리 
+                serverStopped = await apiServer.StopListeningAsync();
+              
                 ServerRunningChanged?.Invoke(apiServer.IsRunning);
 
                 if (!serverStopped)

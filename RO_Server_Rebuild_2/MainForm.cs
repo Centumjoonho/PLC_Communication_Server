@@ -8,6 +8,7 @@ using RO_Server_Rebuild_2.Services;
 using RO_Server_Rebuild_2.Store;
 using RO_Server_Rebuild_2.UC;
 using System;
+using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -107,12 +108,82 @@ namespace RO_Server_Rebuild_2
             if(userControl == null) { return; }
 
             if(mainPanel.Controls.Contains(userControl)) {return; }
-            
+
+            // 디자이너의 기본 Button 형식은 그대로 유지하고,
+            // 실행 중 비활성화된 버튼의 모양만 변경합니다.
+            RegisterDisabledButtonPaint(userControl);
+
             userControl.Dock = DockStyle.Fill;
             userControl.Visible = false;
 
             mainPanel.Controls.Add(userControl);
 
+        }
+
+        private void RegisterDisabledButtonPaint(Control parent)
+        {
+            foreach (Control control in parent.Controls)
+            {
+                Button button = control as Button;
+
+                if (button != null)
+                {
+                    button.Paint += DisabledButton_Paint;
+                    button.EnabledChanged += DisabledButton_EnabledChanged;
+                }
+
+                if (control.HasChildren)
+                {
+                    RegisterDisabledButtonPaint(control);
+                }
+            }
+        }
+
+        private void DisabledButton_EnabledChanged(object sender, EventArgs e)
+        {
+            Button button = sender as Button;
+
+            if (button != null)
+            {
+                button.Invalidate();
+            }
+        }
+
+        private void DisabledButton_Paint(object sender, PaintEventArgs e)
+        {
+            Button button = sender as Button;
+
+            if (button == null || button.Enabled)
+            {
+                return;
+            }
+
+            Color disabledBackColor = ControlPaint.Light(button.BackColor, 0.35f);
+
+            using (SolidBrush backgroundBrush = new SolidBrush(disabledBackColor))
+            {
+                e.Graphics.FillRectangle(backgroundBrush, button.ClientRectangle);
+            }
+
+            Rectangle borderRectangle = button.ClientRectangle;
+            borderRectangle.Width -= 1;
+            borderRectangle.Height -= 1;
+
+            using (Pen borderPen = new Pen(ControlPaint.Dark(disabledBackColor)))
+            {
+                e.Graphics.DrawRectangle(borderPen, borderRectangle);
+            }
+
+            TextRenderer.DrawText(
+                e.Graphics,
+                button.Text,
+                button.Font,
+                button.ClientRectangle,
+                Color.LightGray,
+                TextFormatFlags.HorizontalCenter |
+                TextFormatFlags.VerticalCenter |
+                TextFormatFlags.SingleLine |
+                TextFormatFlags.NoPrefix);
         }
 
         private async void menuPlcRegister_Click(object sender, System.EventArgs e)
@@ -144,13 +215,25 @@ namespace RO_Server_Rebuild_2
 
         private async void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
+ 
             if (shutdownCompleted) { return; }
 
             e.Cancel = true;
 
             if(shutdownInProgress) { return; }
-           
+
+            DialogResult result = MessageBox.Show("프로그램을 종료하시겠습니까?", "종료확인", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+            if (result == DialogResult.No)
+            {
+
+                e.Cancel = true;
+
+                return;
+
+            }
             shutdownInProgress = true;
+
 
             try
             {
@@ -179,6 +262,11 @@ namespace RO_Server_Rebuild_2
                 LogService.Error("프로그램 종료 처리 실패 : " + ex.Message);
             }
                 
+        }
+
+        private void menuLogViewer_Click_1(object sender, EventArgs e)
+        {
+            Reference.LoadUserControls(mainPanel, Reference.Instance.UC_LogViewer);
         }
     }
 }

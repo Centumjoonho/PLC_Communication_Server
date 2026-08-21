@@ -82,7 +82,8 @@ namespace RO_Server_Rebuild_2.Services
                 saveQueue = new BlockingCollection<DbSaveItem>(MaxSaveQueueCount);
 
                 BlockingCollection<DbSaveItem> runningQueue = saveQueue;
-
+                
+                // 순차적으로 Queue에 있는 DB 저장 테스트 처리
                 saveWorkerTask = Task.Run(() => ProcessQueue(runningQueue));
 
                 return true;
@@ -200,15 +201,34 @@ namespace RO_Server_Rebuild_2.Services
         {
             foreach( DbSaveItem saveItem in runningQueue.GetConsumingEnumerable())
             {
+                string plcCode = saveItem.PlcData.PlcCode;
+               
                 try
                 {
                     // 최신 상태는 모든 수집 결과에 대해서 저장
                     plcDb.SaveLatest(saveItem.PlcData);
+                }
+                catch (Exception ex)
+                {
+                    LogService.Error("PLC 최신 상태 저장 실패 : " + plcCode + " / " + ex.Message);
+                }
 
+                // PLC 시간대별 가동초 저장
+                try
+                {
                     if (saveItem.SaveDaily)
                     {
                         plcDb.SaveDaily(saveItem.PlcData, saveItem.WorkDate);
                     }
+                }
+                catch (Exception ex)
+                {
+                    LogService.Error("PLC 가동시간 저장 실패 : " + plcCode + " / " + ex.Message);
+                }
+
+                // PLC 통신 장애 이력 저장
+                try
+                {
                     if (saveItem.SaveHistory)
                     {
                         plcDb.SaveHistory(saveItem.PlcData);
@@ -216,8 +236,8 @@ namespace RO_Server_Rebuild_2.Services
                 }
                 catch (Exception ex)
                 {
-                    LogService.Error("DB 저장 실패 : " + saveItem.PlcData.PlcCode + " / " + ex.Message);
-                }
+                    LogService.Error("PLC 장애 이력 저장 실패 : " + plcCode + " / " + ex.Message);
+                } 
 
             }
            

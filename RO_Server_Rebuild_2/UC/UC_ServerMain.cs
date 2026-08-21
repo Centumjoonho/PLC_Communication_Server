@@ -19,12 +19,33 @@ namespace RO_Server_Rebuild_2.UC
         private bool serverRunning;
         private bool collectRunning;
 
+        // RUN 상태 동그라미 표시 전환값
+        private bool statusBlinkOn;
+
+        // 현재 시간 화면 표시용 타이머
+        private readonly System.Windows.Forms.Timer currentTimeTimer;
+
         public UC_ServerMain()
         {
             InitializeComponent();
             InitializeView();
+
             btnCollectStart.Enabled = false;
+
+            // Status 셀의 색상과 표시 형식 변경
+            gridCollect.CellFormatting += GridCollect_CellFormatting;
+
+            // 현재 PC 시간을 1초마다 화면에 표시
+            currentTimeTimer = new System.Windows.Forms.Timer();
+            currentTimeTimer.Interval = 1000;
+            currentTimeTimer.Tick += CurrentTimeTimer_Tick;
+            currentTimeTimer.Start();
+
+            // 컨트롤이 제거될 때 타이머 정리
+            Disposed += UC_ServerMain_Disposed;
+
         }
+       
 
         public event EventHandler ServerToggleRequested;
         public event EventHandler CollectToggleRequested;
@@ -111,6 +132,116 @@ namespace RO_Server_Rebuild_2.UC
             gridCollect.DataSource = null;
             gridCollect.DataSource = displayList;
 
+        }
+        private void GridCollect_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            DataGridView grid = sender as DataGridView;
+
+            if (grid == null || e.RowIndex < 0 || e.ColumnIndex < 0)
+            {
+                return;
+            }
+
+            DataGridViewColumn column = grid.Columns[e.ColumnIndex];
+
+            // Status 열이 아니면 처리하지 않음
+            bool statusColumn =
+                string.Equals(
+                    column.Name,
+                    "Status",
+                    StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(
+                    column.DataPropertyName,
+                    "Status",
+                    StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(
+                    column.HeaderText,
+                    "Status",
+                    StringComparison.OrdinalIgnoreCase);
+
+            if (!statusColumn)
+            {
+                return;
+            }
+
+            string status = Convert.ToString(e.Value)
+                .Trim()
+                .ToUpperInvariant();
+
+            if (status == "RUN")
+            {
+                Color runColor = Color.FromArgb(0, 128, 64);
+
+                e.CellStyle.ForeColor = runColor;
+                e.CellStyle.SelectionForeColor = runColor;
+
+                // 통신 중에는 채운 원과 빈 원을 번갈아 표시
+                if (collectRunning)
+                {
+                    e.Value = statusBlinkOn ? "● RUN" : "○ RUN";
+                }
+                else
+                {
+                    e.Value = "○ RUN";
+                }
+
+                e.FormattingApplied = true;
+            }
+            else if (status == "ERROR")
+            {
+                Color errorColor = Color.FromArgb(190, 45, 45);
+
+                e.CellStyle.ForeColor = errorColor;
+                e.CellStyle.SelectionForeColor = errorColor;
+            }
+            else if (status == "WAIT")
+            {
+                Color waitColor = Color.FromArgb(190, 120, 0);
+
+                e.CellStyle.ForeColor = waitColor;
+                e.CellStyle.SelectionForeColor = waitColor;
+            }
+            else if (status == "STOP")
+            {
+                Color stopColor = Color.DimGray;
+
+                e.CellStyle.ForeColor = stopColor;
+                e.CellStyle.SelectionForeColor = stopColor;
+            }
+            else
+            {
+                // 다른 값은 그리드 기본 색상 사용
+                e.CellStyle.ForeColor =
+                    grid.DefaultCellStyle.ForeColor;
+
+                e.CellStyle.SelectionForeColor =
+                    grid.DefaultCellStyle.SelectionForeColor;
+            }
+        }
+
+        private void CurrentTimeTimer_Tick(object sender, EventArgs e)
+        {
+            // 현재 PC의 로컬 시간을 표시
+            lblStatus.Text = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+            // PLC 통신 중일 때만 RUN 동그라미 상태 변경
+            if (collectRunning)
+            {
+                statusBlinkOn = !statusBlinkOn;
+            }
+            else
+            {
+                statusBlinkOn = false;
+            }
+
+            // Status 셀을 다시 그려 동그라미 표시 변경
+            gridCollect.Invalidate();
+        }
+        private void UC_ServerMain_Disposed(object sender, EventArgs e)
+        {
+            currentTimeTimer.Stop();
+            currentTimeTimer.Tick -= CurrentTimeTimer_Tick;
+            currentTimeTimer.Dispose();
         }
     }
 }

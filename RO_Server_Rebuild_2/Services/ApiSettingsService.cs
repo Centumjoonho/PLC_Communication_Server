@@ -15,36 +15,7 @@ namespace RO_Server_Rebuild_2.Services
             Port = 3410,
             ApiKey = "HYUNDAI_RB_RO_2026"
         };
-        public bool TestApiSettings(ApiSettings apiSettings, out string errorMessage)
-        {
-            return ValidateApiSetting(apiSettings, out errorMessage);
-        }
-
-        public bool ApplyApiSettings(ApiSettings apiSettings , out string errorMessage)
-        {
-            if (!ValidateApiSetting(apiSettings, out errorMessage)){
-                
-                return false;
-            }
-            // 입력된 값 셋팅
-            currentApisettings = new ApiSettings
-            {
-                Port = apiSettings.Port,
-                ApiKey = apiSettings.ApiKey,
-            };
-
-            return true;
-        }
-        public bool TryGetCurrentSettings(out ApiSettings apiSettings)
-        {
-            apiSettings = new ApiSettings
-            {
-                Port = currentApisettings.Port,
-                ApiKey = currentApisettings.ApiKey
-            };
-
-            return true;
-        }
+        // 유효성 검사 메서드
         private bool ValidateApiSetting(ApiSettings apiSettings, out string errorMessage)
         {
             errorMessage = string.Empty;
@@ -69,5 +40,38 @@ namespace RO_Server_Rebuild_2.Services
 
             return true;
         }
+        // API 설정 테스트 메서드
+        public bool TestApiSettings(ApiSettings apiSettings, out string errorMessage)
+        {
+            return ValidateApiSetting(apiSettings, out errorMessage);
+        }
+        // API 설정 적용 메서드
+        public bool ApplyApiSettings(ApiSettings apiSettings , out string errorMessage)
+        {
+            if (!ValidateApiSetting(apiSettings, out errorMessage)){
+                
+                return false;
+            }
+            // 입력된 값 셋팅
+            currentApisettings = new ApiSettings
+            {
+                Port = apiSettings.Port,
+                ApiKey = apiSettings.ApiKey,
+            };
+
+            return true;
+        }
+        // 현재 API 설정 가져오기 메서드
+        public bool TryGetCurrentSettings(out ApiSettings apiSettings)
+        {
+            apiSettings = new ApiSettings
+            {
+                Port = currentApisettings.Port,
+                ApiKey = currentApisettings.ApiKey
+            };
+
+            return true;
+        }
+       
     }
 }

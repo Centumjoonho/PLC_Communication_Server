@@ -1,4 +1,4 @@
-﻿namespace RO_Server_Rebuild_2.UC
+namespace RO_Server_Rebuild_2.UC
 {
     partial class UC_LogViewer
     {
@@ -35,7 +35,12 @@
             this.txtLog = new System.Windows.Forms.RichTextBox();
             this.lblError = new System.Windows.Forms.Label();
             this.txtError = new System.Windows.Forms.RichTextBox();
+            this.logSplitContainer = new System.Windows.Forms.SplitContainer();
             this.headerPanel.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.logSplitContainer)).BeginInit();
+            this.logSplitContainer.Panel1.SuspendLayout();
+            this.logSplitContainer.Panel2.SuspendLayout();
+            this.logSplitContainer.SuspendLayout();
             this.SuspendLayout();
             // 
             // headerPanel
@@ -82,7 +87,7 @@
             this.lblLog.Dock = System.Windows.Forms.DockStyle.Top;
             this.lblLog.Font = new System.Drawing.Font("맑은 고딕", 9.5F, System.Drawing.FontStyle.Bold);
             this.lblLog.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(48)))), ((int)(((byte)(67)))));
-            this.lblLog.Location = new System.Drawing.Point(0, 64);
+            this.lblLog.Location = new System.Drawing.Point(0, 0);
             this.lblLog.Margin = new System.Windows.Forms.Padding(0);
             this.lblLog.Name = "lblLog";
             this.lblLog.Size = new System.Drawing.Size(1443, 24);
@@ -94,14 +99,15 @@
             // 
             this.txtLog.BackColor = System.Drawing.Color.White;
             this.txtLog.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.txtLog.Dock = System.Windows.Forms.DockStyle.Top;
             this.txtLog.Font = new System.Drawing.Font("Consolas", 9.5F);
             this.txtLog.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(48)))), ((int)(((byte)(67)))));
-            this.txtLog.Location = new System.Drawing.Point(0, 88);
+            this.txtLog.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.txtLog.Location = new System.Drawing.Point(0, 24);
             this.txtLog.Margin = new System.Windows.Forms.Padding(0);
             this.txtLog.Name = "txtLog";
             this.txtLog.ReadOnly = true;
-            this.txtLog.Size = new System.Drawing.Size(1443, 482);
+            this.txtLog.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.Both;
+            this.txtLog.Size = new System.Drawing.Size(1443, 261);
             this.txtLog.TabIndex = 4;
             this.txtLog.Text = "";
             this.txtLog.WordWrap = false;
@@ -111,7 +117,7 @@
             this.lblError.Dock = System.Windows.Forms.DockStyle.Top;
             this.lblError.Font = new System.Drawing.Font("맑은 고딕", 9.5F, System.Drawing.FontStyle.Bold);
             this.lblError.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(145)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.lblError.Location = new System.Drawing.Point(0, 570);
+            this.lblError.Location = new System.Drawing.Point(0, 0);
             this.lblError.Margin = new System.Windows.Forms.Padding(0);
             this.lblError.Name = "lblError";
             this.lblError.Size = new System.Drawing.Size(1443, 24);
@@ -126,28 +132,53 @@
             this.txtError.Dock = System.Windows.Forms.DockStyle.Fill;
             this.txtError.Font = new System.Drawing.Font("Consolas", 9.5F);
             this.txtError.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(145)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
-            this.txtError.Location = new System.Drawing.Point(0, 594);
+            this.txtError.Location = new System.Drawing.Point(0, 24);
             this.txtError.Margin = new System.Windows.Forms.Padding(0);
             this.txtError.Name = "txtError";
             this.txtError.ReadOnly = true;
-            this.txtError.Size = new System.Drawing.Size(1443, 6);
+            this.txtError.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.Both;
+            this.txtError.Size = new System.Drawing.Size(1443, 221);
             this.txtError.TabIndex = 6;
             this.txtError.Text = "";
             this.txtError.WordWrap = false;
+            // 
+            // logSplitContainer
+            // 
+            this.logSplitContainer.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.logSplitContainer.Location = new System.Drawing.Point(0, 64);
+            this.logSplitContainer.Name = "logSplitContainer";
+            this.logSplitContainer.Orientation = System.Windows.Forms.Orientation.Horizontal;
+            // 
+            // logSplitContainer.Panel1
+            // 
+            this.logSplitContainer.Panel1.Controls.Add(this.txtLog);
+            this.logSplitContainer.Panel1.Controls.Add(this.lblLog);
+            this.logSplitContainer.Panel1MinSize = 140;
+            // 
+            // logSplitContainer.Panel2
+            // 
+            this.logSplitContainer.Panel2.Controls.Add(this.txtError);
+            this.logSplitContainer.Panel2.Controls.Add(this.lblError);
+            this.logSplitContainer.Panel2MinSize = 140;
+            this.logSplitContainer.Size = new System.Drawing.Size(1443, 536);
+            this.logSplitContainer.SplitterDistance = 285;
+            this.logSplitContainer.SplitterWidth = 6;
+            this.logSplitContainer.TabIndex = 7;
             // 
             // UC_LogViewer
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.Controls.Add(this.txtError);
-            this.Controls.Add(this.lblError);
-            this.Controls.Add(this.txtLog);
-            this.Controls.Add(this.lblLog);
+            this.Controls.Add(this.logSplitContainer);
             this.Controls.Add(this.headerPanel);
             this.Name = "UC_LogViewer";
             this.Size = new System.Drawing.Size(1443, 600);
             this.headerPanel.ResumeLayout(false);
             this.headerPanel.PerformLayout();
+            this.logSplitContainer.Panel1.ResumeLayout(false);
+            this.logSplitContainer.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.logSplitContainer)).EndInit();
+            this.logSplitContainer.ResumeLayout(false);
             this.ResumeLayout(false);
 
         }
@@ -161,5 +192,6 @@
         private System.Windows.Forms.RichTextBox txtLog;
         private System.Windows.Forms.Label lblError;
         private System.Windows.Forms.RichTextBox txtError;
+        private System.Windows.Forms.SplitContainer logSplitContainer;
     }
 }

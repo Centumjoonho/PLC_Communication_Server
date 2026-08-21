@@ -236,7 +236,5 @@ namespace RO_Server_Rebuild_2.UC
             txtApiPort.Text = apiSettings.Port.ToString();
             txtApiKey.Text = apiSettings.ApiKey;
         }
-
-      
     }
 }
