@@ -84,12 +84,35 @@ PLC 통신 작업이 DB 쓰기를 직접 기다리지 않도록 `DbSaveService`�
 
 현재 코드는 다음 테이블을 사용합니다.
 
-- `ro_plc_master`
-- `ro_plc_latest`
-- `ro_operation_daily`
-- `ro_plc_history`
+- `ro_plc_master`: PLC 연결 정보와 사용 여부
+- `ro_plc_latest`: PLC별 최신 운전 상태
+- `ro_operation_daily`: 작업일·시간대별 운전 초
+- `ro_plc_history`: PLC 통신 실패 이력
 
-> 현재 저장소에는 DB 초기화 SQL이 포함되어 있지 않습니다. 실행 전 코드의 쿼리와 모델에 맞는 스키마를 준비해야 하며, 공개용 샘플 스키마를 별도 추가하는 것을 권장합니다.
+```mermaid
+erDiagram
+    RO_PLC_MASTER ||--o| RO_PLC_LATEST : "최신 상태"
+    RO_PLC_MASTER ||--o{ RO_OPERATION_DAILY : "작업일 집계"
+    RO_PLC_MASTER ||--o{ RO_PLC_HISTORY : "장애 이력"
+```
+
+### DB 초기화
+
+코드의 조회·저장 쿼리에 맞춘 MariaDB/MySQL 스키마가 [`database/init.sql`](database/init.sql)에 포함되어 있습니다.
+
+```bash
+mysql -u root -p < database/init.sql
+```
+
+기본 DB 이름은 `plc_monitoring`입니다. 다른 이름을 사용할 경우 SQL의 `CREATE DATABASE`·`USE` 구문과 Server 설정 화면의 DB Name을 동일하게 변경하세요.
+
+선택적으로 비활성화된 테스트 PLC 3건을 추가할 수 있습니다.
+
+```bash
+mysql -u root -p < database/sample_data.sql
+```
+
+샘플 주소는 문서용 대역인 `192.0.2.x`를 사용하며 `use_yn='N'`으로 저장되므로 실제 통신을 시도하지 않습니다. 운영 환경에서는 실제 접속값을 공개 저장소에 커밋하지 말고 Server의 PLC 등록 화면에서 관리하세요.
 
 ## HTTP/JSON API
 
@@ -132,6 +155,12 @@ View
 | DbSaveService | 저장 큐와 백그라운드 DB 쓰기 |
 | PlcDb | MariaDB/MySQL 조회와 저장 |
 | ApiServer / ApiHandler | HTTP 수신, 인증, JSON 응답 |
+
+## 실행 화면
+
+실제 실행 화면은 공개 가능한 샘플 데이터로 캡처해 추가합니다. 현재 저장소에는 원본 캡처가 없어 임의로 만든 이미지는 사용하지 않았습니다.
+
+Server 메인, PLC 등록, 장애 격리 로그와 설정 화면의 파일명 및 마스킹 기준은 [실행 화면 캡처 가이드](docs/screenshots/README.md)에 정리되어 있습니다. 특히 PLC 한 대를 의도적으로 연결 실패 상태로 둔 뒤 다른 PLC 수집과 DB 저장이 계속되는 로그를 함께 보여주면 장애 격리 설계를 명확하게 전달할 수 있습니다.
 
 ## 기술 스택
 
@@ -192,7 +221,7 @@ Client의 Server IP, API Port, 요청 주기와 API Key를 이 Server의 설정�
 
 ## 향후 개선 항목
 
-- DB 초기화 및 샘플 데이터 SQL 제공
+- DB 스키마 변경 이력과 마이그레이션 버전 관리
 - API Key를 환경 변수 또는 암호화된 설정 저장소로 분리
 - 단위 테스트와 PLC Simulator 기반 통합 테스트 추가
 - 재시도 간격의 지수 백오프 적용
