@@ -19,6 +19,9 @@ namespace RO_Server_Rebuild_2.UC
         private bool serverRunning;
         private bool collectRunning;
 
+        // 서버 또는 PLC 시작 정지 작업 중인지 따른 버튼 사용 상태
+        private bool operationEnabled = true;
+
         // RUN 상태 동그라미 표시 전환값
         private bool statusBlinkOn;
 
@@ -29,9 +32,6 @@ namespace RO_Server_Rebuild_2.UC
         {
             InitializeComponent();
             InitializeView();
-
-            btnCollectStart.Enabled = false;
-
             // Status 셀의 색상과 표시 형식 변경
             gridCollect.CellFormatting += GridCollect_CellFormatting;
 
@@ -71,8 +71,11 @@ namespace RO_Server_Rebuild_2.UC
             if (InvokeRequired)
             {
                 BeginInvoke(new Action(() => SetServerRunning(running)));
+
                 return;
             }
+            // 현재 API 서버 상태를 먼저 저장
+            serverRunning = running;
 
             btnServerStart.Text = running ? "서버 정지" : "서버 시작";
 
@@ -82,10 +85,7 @@ namespace RO_Server_Rebuild_2.UC
             
             lblApiState.BackColor =running ? Color.FromArgb(0, 128, 64) : Color.LightGray;
             
-            btnCollectStart.Enabled = running;
-
-            
-            serverRunning = running;
+            btnCollectStart.Enabled = operationEnabled && serverRunning;
         }
 
         public void SetCollectRunning(bool running)
@@ -105,6 +105,22 @@ namespace RO_Server_Rebuild_2.UC
 
 
             collectRunning = running;
+        }
+        public void SetOperationEnabled(bool enabled)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(()=>SetOperationEnabled(enabled)));
+                
+                return;
+                
+            }
+            operationEnabled = enabled;
+            // 작업 중에는 서버 버튼 조작 방지
+            btnServerStart.Enabled = enabled;
+
+            // PLC 버튼은 작업 중이 아니고 서버가 실행 중일 때만 사용 가능
+            btnCollectStart.Enabled = enabled && serverRunning;
         }
 
         public void ShowCollectedData(IList<PlcData> dataList)
@@ -243,5 +259,7 @@ namespace RO_Server_Rebuild_2.UC
             currentTimeTimer.Tick -= CurrentTimeTimer_Tick;
             currentTimeTimer.Dispose();
         }
+
+       
     }
 }

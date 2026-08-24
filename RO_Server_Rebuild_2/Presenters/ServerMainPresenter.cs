@@ -14,8 +14,11 @@ namespace RO_Server_Rebuild_2.Presenters
         private readonly IServerMainView smView;
         private readonly ServerMainService smService;
 
-        private bool serverToggleButtonRunning;
-        private bool collectToggleButtonRunning;
+        //private bool serverToggleButtonRunning;
+        //private bool collectToggleButtonRunning;
+
+        // 서버와 PLC 시작·정지 작업의 동시 실행 방지
+        private bool toggleOperationRunning;
 
         public ServerMainPresenter(IServerMainView smView, ServerMainService smService)
         {
@@ -35,12 +38,13 @@ namespace RO_Server_Rebuild_2.Presenters
 
         private async void OnServerToggleRequested(object sender, EventArgs e)
         {
-            if (serverToggleButtonRunning)
+            if (toggleOperationRunning)
             {
                 return;
             }
 
-            serverToggleButtonRunning = true;
+            toggleOperationRunning = true;
+            smView.SetOperationEnabled(false);
 
             try
             {
@@ -75,7 +79,8 @@ namespace RO_Server_Rebuild_2.Presenters
             }
             finally
             {
-                serverToggleButtonRunning = false;
+                toggleOperationRunning = false;
+                smView.SetOperationEnabled(true);
             }
            
             
@@ -97,15 +102,21 @@ namespace RO_Server_Rebuild_2.Presenters
 
         private async void OnCollectToggleRequested(object sender, EventArgs e)
         {
-            if (collectToggleButtonRunning) { return; }
+            if (toggleOperationRunning) { return; }
 
-            collectToggleButtonRunning = true;
+            toggleOperationRunning = true;
+            smView.SetOperationEnabled(false);
 
             try
             {
                 if (smService.IsCollectRunning())
                 {
-                    await smService.StopCollectAsync();
+                    bool stopped = await smService.StopCollectAsync();
+                    
+                    if (!stopped)
+                    {
+                        LogService.Error("PLC 반복 수집 정리에 실패했습니다.");
+                    }
 
                     return;
                 }
@@ -125,7 +136,10 @@ namespace RO_Server_Rebuild_2.Presenters
 
                 LogService.Error("PLC 반복 수집 처리 실패 : " + ex.Message);
             }
-            finally { collectToggleButtonRunning =false; }
+            finally {
+                toggleOperationRunning = false;
+                smView.SetOperationEnabled(true);
+            }
         }
 
         public async Task<bool> ShutdownAsync()

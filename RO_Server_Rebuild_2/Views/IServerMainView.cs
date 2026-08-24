@@ -14,6 +14,7 @@ namespace RO_Server_Rebuild_2.Views
 
         void SetServerRunning(bool running);
         void SetCollectRunning(bool running);
+        void SetOperationEnabled(bool enabled);
         void ShowCollectedData(IList<PlcData> dataList);
     }
 }
