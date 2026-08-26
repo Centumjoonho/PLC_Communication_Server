@@ -31,9 +31,13 @@ namespace RO_Server_Rebuild_2.Api
         private CancellationTokenSource cancellationTokenSource;
         private Task tcpListenTask;
 
+        // 클라이언트로부터 다음 데이터가 도착하기까지 기다리는 최대 시간
         private const int ClientReadTimeoutMs = 3000;
+        // 비정상적으로 큰 HTTP Header가 메모리에 계속 쌓이는 것을 방지
+        private const int MaxHeaderSize = 16 * 1024;
+        // JSON 본문의 최대 크기를 1MB로 제한
         private const int MaxBodySize = 1024 * 1024;
-
+        
         private const int MaxConcurrentClientCount = 20;
         private readonly SemaphoreSlim clientSemaphore = new SemaphoreSlim(MaxConcurrentClientCount, MaxConcurrentClientCount);
 
@@ -360,73 +364,106 @@ namespace RO_Server_Rebuild_2.Api
         private async Task<string> ReadHttpBodyAsync(TcpClient client, CancellationToken cancellationToken)
         {
             NetworkStream stream = client.GetStream();
+
+            // 네트워크에서 한 번에 읽을 임시 공간
             byte[] buffer = new byte[8192];
 
-            // 클라이언트가 처음 보낸 데이터 읽기
-            int readLength = await ReadStreamWithTimeoutAsync(stream, buffer, buffer.Length, cancellationToken);
-
-            if (readLength <= 0)
+            // 지금까지 받은 전체 HTTP 요청 데이터 : 계속 추가
+            byte[] receivedBytes = null;
+            
+            int headerEnd = -1;
+            
+            //HTTP header가 여러번 나뉘어 들어올 수 있으므로 누적해서 읽음
+            using (MemoryStream requestStream = new MemoryStream())
             {
-                throw new IOException("API 요청 데이터가 없습니다.");
-            }
-
-            // HTTP Header는 영문 문자이므로 ASCII로 확인
-            string requestText = Encoding.ASCII.GetString(buffer, 0, readLength);
-
-            // Header와 Body 사이의 빈 줄 위치 확인
-            int headerEnd = requestText.IndexOf("\r\n\r\n", StringComparison.Ordinal);
-
-            if (headerEnd < 0)
-            {
-                throw new InvalidOperationException("HTTP 요청 Header가 올바르지 않습니다.");
-            }
-
-            string headerText = requestText.Substring(0, headerEnd);
-            int contentLength = GetContentLength(headerText);
-
-            if (contentLength <= 0)
-            {
-                throw new InvalidOperationException("HTTP Content-Length가 올바르지 않습니다.");
-            }
-
-            if (contentLength > MaxBodySize)
-            {
-                throw new InvalidOperationException("API 요청 본문이 너무 큽니다.");
-            }
-
-            // Header 끝의 \r\n\r\n 다음부터 Body가 시작
-            int bodyStartIndex = headerEnd + 4;
-            int firstBodyLength = readLength - bodyStartIndex;
-
-            using (MemoryStream bodyStream = new MemoryStream())
-            {
-                // 첫 수신 데이터에 포함된 Body 저장
-                if (firstBodyLength > 0)
+                while (headerEnd < 0)
                 {
-                    int saveLength = Math.Min(firstBodyLength, contentLength);
-                    bodyStream.Write(buffer, bodyStartIndex, saveLength);
-                }
-
-                // 아직 받지 못한 Body가 있으면 계속 읽기
-                while (bodyStream.Length < contentLength)
-                {
-                    int remainingLength = contentLength - (int)bodyStream.Length;
-                    int readSize = Math.Min(buffer.Length, remainingLength);
-
-                    readLength = await ReadStreamWithTimeoutAsync(stream, buffer, readSize, cancellationToken);
+                    // 클라이언트가 처음 보낸 데이터 읽기
+                    int readLength = await ReadStreamWithTimeoutAsync(stream, buffer, buffer.Length, cancellationToken);
 
                     if (readLength <= 0)
                     {
-                        throw new IOException("API 요청 본문 수신 중 연결이 종료되었습니다.");
+                        throw new IOException("API 요청 Header 수신 중 연결이 종료되었습니다.");
                     }
 
-                    bodyStream.Write(buffer, 0, readLength);
+                    // 받은 내용을 기존 수신 데이터 뒤에 추가
+                    requestStream.Write(buffer, 0, readLength);
+
+                    // 받은 전체 데이터 배열로 셋팅
+                    receivedBytes = requestStream.ToArray();
+
+                    // HTTP Header는 영문 문자이므로 ASCII로 확인
+                    string requestText = Encoding.ASCII.GetString(receivedBytes, 0, receivedBytes.Length);
+
+                    // Header와 Body 사이의 빈 줄 위치 확인
+                    headerEnd = requestText.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+
+                    // Header 끝을 아직 찾지 못했는데 제한 크기를 넘은 경우
+                    if (headerEnd < 0 && requestStream.Length > MaxHeaderSize)
+                    {
+                        throw new InvalidOperationException("HTTP 요청 Header가 너무 큽니다.");
+                    }
                 }
 
-                byte[] bodyBytes = bodyStream.ToArray();
+                // Header 끝을 찾았더라도 Header 자체가 제한 크기를 넘으면 거부
+                if (headerEnd > MaxHeaderSize)
+                {
+                    throw new InvalidOperationException("HTTP 요청 Header가 너무 큽니다.");
+                }
 
-                return Encoding.UTF8.GetString(bodyBytes, 0, contentLength);
+                string headerText = Encoding.ASCII.GetString( receivedBytes, 0, headerEnd);
+                
+                int contentLength = GetContentLength(headerText);
+
+                    if (contentLength <= 0)
+                    {
+                        throw new InvalidOperationException("HTTP Content-Length가 올바르지 않습니다.");
+                    }
+
+                    if (contentLength > MaxBodySize)
+                    {
+                        throw new InvalidOperationException("API 요청 본문이 너무 큽니다.");
+                    }
+
+                    // Header 끝의 \r\n\r\n 다음부터 Body가 시작
+                    int bodyStartIndex = headerEnd + 4;
+
+                    using (MemoryStream bodyStream = new MemoryStream())
+                    {
+                    // Header를 읽는 과정에서 Body까지 함께 들어온 경우 먼저 저장
+                    int receivedBodyLength = receivedBytes.Length - bodyStartIndex;
+
+                    if (receivedBodyLength > 0)
+                    {
+                        int saveLength = Math.Min(receivedBodyLength, contentLength);
+
+                        bodyStream.Write(receivedBytes, bodyStartIndex, saveLength);
+                    }
+
+                    // 아직 받지 못한 Body가 있으면 Content-Length만큼 계속 읽음
+                    while (bodyStream.Length < contentLength)
+                    {
+                        int remainingLength = contentLength - (int)bodyStream.Length;
+                            
+                        int readSize = Math.Min(buffer.Length, remainingLength);
+
+                        int readLength = await ReadStreamWithTimeoutAsync(stream, buffer, readSize, cancellationToken);
+
+                        if (readLength <= 0)
+                        {
+                            throw new IOException("API 요청 본문 수신 중 연결이 종료되었습니다.");
+                        }
+
+                        bodyStream.Write(buffer, 0, readLength);
+                    }
+
+                        byte[] bodyBytes = bodyStream.ToArray();
+
+                        return Encoding.UTF8.GetString(bodyBytes, 0, contentLength);
+                    }
+
             }
+
         }
         // HTTP Header에서 Content-Length 값 찾기
         private int GetContentLength(string headerText)
@@ -451,14 +488,11 @@ namespace RO_Server_Rebuild_2.Api
 
             return -1;
         }
-        // 클라이언트 데이터를 최대 3초 동안 기다림
-        private async Task<int> ReadStreamWithTimeoutAsync(
-            NetworkStream stream,
-            byte[] buffer,
-            int readSize,
-            CancellationToken cancellationToken)
+        // 클라이언트가 데이터를 보내지 않은 상태로 연결만 계속 유지하는 것을 방지 (3초 유지)
+        private async Task<int> ReadStreamWithTimeoutAsync(NetworkStream stream,byte[] buffer,int readSize, CancellationToken cancellationToken)
         {
             Task<int> readTask = stream.ReadAsync(buffer, 0, readSize, cancellationToken);
+
             Task timeoutTask = Task.Delay(ClientReadTimeoutMs, cancellationToken);
 
             Task completedTask = await Task.WhenAny(readTask, timeoutTask);

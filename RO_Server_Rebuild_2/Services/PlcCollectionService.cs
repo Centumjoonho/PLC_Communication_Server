@@ -197,10 +197,7 @@ namespace RO_Server_Rebuild_2.Services
                     bool runRateTaskCompleted = runRateTask == null || runRateTask.IsCompleted;
 
                     // 모든 작업이 이미 정지된 상태
-                    if (cancellationTokenSource == null &&
-                        collectTaskCompleted &&
-                        runRateTaskCompleted &&
-                        !dbSaveService.IsRunning())
+                    if (cancellationTokenSource == null && collectTaskCompleted && runRateTaskCompleted && !dbSaveService.IsRunning())
                     {
                         SetRunning(false);
 
@@ -640,7 +637,7 @@ namespace RO_Server_Rebuild_2.Services
         {
             return collectRunning;
         }
-
+        // PLC 반복 수집의 실행 상태를 저장하고, 상태가 바뀌었다는 사실을 화면까지 전달
         private void SetRunning(bool running)
         {
             if (collectRunning == running)
@@ -652,7 +649,7 @@ namespace RO_Server_Rebuild_2.Services
 
             RunningChanged?.Invoke(running);
         }
-
+        // 비동기 PLC  수집 반복 함수
         private async Task CollectLoopAsync(IList<PlcMaster> plcMasterList , CancellationToken cancellationToken)
         {
             try
@@ -696,11 +693,32 @@ namespace RO_Server_Rebuild_2.Services
             }
             catch (OperationCanceledException)
             {
-                // 사용자가 요청한 정상적인 PLC 통신 정지
+                // 사용자 정지 또는 프로그램 종료로 발생한 정상 취소
             }
             catch (Exception ex)
             {
                 LogService.Error("PLC 반복 수집 중 오류 발생 : " + ex.Message);
+
+                CancellationTokenSource runningTokenSource = null;
+                bool startCleanup = false;
+                lock (stateLock)
+                {
+                    // 다른 정리 작업이 시작 되지 않은경우에만 자동 정리 시작
+                    if (!stopRunning)
+                    {
+                        stopRunning = true;
+                        runningTokenSource = cancellationTokenSource;
+                        startCleanup = true;
+                    }
+                }
+
+                if (startCleanup)
+                {
+                    runningTokenSource?.Cancel();
+
+                    _ = Task.Run(() => StopCollectAsync());
+                }
+
             }
             finally
             {
@@ -750,6 +768,29 @@ namespace RO_Server_Rebuild_2.Services
             catch (Exception ex)
             {
                 LogService.Error("PLC 가동시간 계산 중 오류 발생 : " + ex.Message);
+               
+                CancellationTokenSource runningTokenSource = null;
+                bool startCleanup = false;
+
+                lock (stateLock)
+                {
+                    // 다른 정리 작업이 시작되지 않은 경우에만 자동 정리 시작
+                    if (!stopRunning)
+                    {
+                        stopRunning = true;
+                        runningTokenSource = cancellationTokenSource;
+                        startCleanup = true;
+                    }
+                }
+
+                if (startCleanup)
+                {
+                    // PLC 수집 루프에도 정지 요청
+                    runningTokenSource?.Cancel();
+
+                    // 현재 RunRateLoopAsync가 종료된 후 전체 자원 정리
+                    _ = Task.Run(() => StopCollectAsync());
+                }
             }
             finally
             {

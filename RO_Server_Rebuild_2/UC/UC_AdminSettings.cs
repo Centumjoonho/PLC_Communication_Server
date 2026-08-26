@@ -29,8 +29,6 @@ namespace RO_Server_Rebuild_2.UC
         public event EventHandler ApiTestRequested;
         public event EventHandler ApiApplyRequested;
 
-
-
         private void btnBack_Click(object sender, EventArgs e)
         {
             Reference.LoadUserControls(Reference.Instance.MainPanel, Reference.Instance.UC_ServerMain);
