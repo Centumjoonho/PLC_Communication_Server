@@ -35,7 +35,7 @@ namespace RO_Server_Rebuild_2.Presenters
 
             if (!inputSuccess)
             {
-                LogService.Error("기본 DB 설정 입력 오류 : " + errorMessage);
+                LogService.Error("[DB_SETTING][INITIALIZE][VALIDATE_FAIL] " + errorMessage);
                 return;
             }
 
@@ -43,11 +43,11 @@ namespace RO_Server_Rebuild_2.Presenters
 
             if (!applySuccess)
             {
-                LogService.Error("기본 DB 설정 적용 실패 : " + errorMessage);
+                LogService.Error("[DB_SETTING][INITIALIZE][APPLY_FAIL] " + errorMessage);
                 return;
             }
 
-            LogService.Log("기본 DB 설정이 자동으로 적용되었습니다.");
+            LogService.Log("[DB_SETTING][INITIALIZE][SUCCESS] 기본 DB 설정이 자동으로 적용되었습니다.");
         }
 
         private async void OnDbTestRequested(object sender, EventArgs e)
@@ -64,7 +64,7 @@ namespace RO_Server_Rebuild_2.Presenters
 
                 if (!inputSuccess)
                 {
-                    LogService.Error(errorMessage);
+                    LogService.Error("[DB_SETTING][CONNECTION_TEST][VALIDATE_FAIL] " + errorMessage);
 
                     return;
                 }
@@ -74,7 +74,7 @@ namespace RO_Server_Rebuild_2.Presenters
 
                 if (!connectionSuccess)
                 {
-                    LogService.Error(errorMessage);
+                    LogService.Error("[DB_SETTING][CONNECTION_TEST][FAIL] " + errorMessage);
 
                     return;
                 }
@@ -88,7 +88,7 @@ namespace RO_Server_Rebuild_2.Presenters
             {
                 string exceptionMessage = "DB 연결 테스트 실패 : " + ex.Message;
 
-                LogService.Error(exceptionMessage);
+                LogService.Error("[DB_SETTING][CONNECTION_TEST][EXCEPTION] " + exceptionMessage);
             }
             finally { dbView.SetOperationEnabled(true);}
 
@@ -106,7 +106,7 @@ namespace RO_Server_Rebuild_2.Presenters
 
                 if (!inputSuccess)
                 {
-                    LogService.Error(errorMessage);
+                    LogService.Error("[DB_SETTING][APPLY][VALIDATE_FAIL] " + errorMessage);
 
 
                     return;
@@ -117,7 +117,7 @@ namespace RO_Server_Rebuild_2.Presenters
 
                 if (!applySuccess)
                 {
-                    LogService.Error(errorMessage);
+                    LogService.Error("[DB_SETTING][APPLY][FAIL] " + errorMessage);
 
                     return;
                 }
@@ -133,7 +133,7 @@ namespace RO_Server_Rebuild_2.Presenters
             {
                 string exceptionMessage = "DB 설정 적용 처리 실패 : " + ex.Message;
 
-                LogService.Error(exceptionMessage);
+                LogService.Error("[DB_SETTING][APPLY][EXCEPTION] " + exceptionMessage);
 
             }
             finally { dbView.SetOperationEnabled(true);}

@@ -225,7 +225,7 @@ namespace RO_Server_Rebuild_2.Api
                             break;
                         }
                         
-                        LogService.Error("API 클라이언트 접속 대기 실패 : " + ex.Message);
+                        LogService.Error("[API][ACCEPT][FAIL] " + ex.Message);
 
                         // 일시적인 소켓 오류라면 잠시 후 다시 접속 대기
                         await Task.Delay(100, cancellationToken);
@@ -238,7 +238,7 @@ namespace RO_Server_Rebuild_2.Api
             }
             catch (Exception ex)
             {
-                LogService.Error("API 클라이언트 접속 처리 실패 : " + ex.Message);
+                LogService.Error("[API][ACCEPT_LOOP][EXCEPTION] " + ex.Message);
             }
         }
         // 접속한 클라이언트 1개의 API 요청과 응답 처리
@@ -295,7 +295,10 @@ namespace RO_Server_Rebuild_2.Api
             }
             catch (Exception ex)
             {
-                LogService.Error("API 요청 처리 실패 : " +clientIp + " / " + ex.Message);
+                LogService.Error(
+                    "[API][REQUEST][FAIL] " +
+                    "ClientIp: " + clientIp + " / " +
+                    ex.Message);
 
                 try
                 {
@@ -595,7 +598,7 @@ namespace RO_Server_Rebuild_2.Api
             }
             catch (Exception ex)
             {
-                LogService.Error("API 서버 정지 실패 : " + ex.Message);
+                LogService.Error("[API_SERVER][STOP][FAIL] " + ex.Message);
 
                 return false;
             }

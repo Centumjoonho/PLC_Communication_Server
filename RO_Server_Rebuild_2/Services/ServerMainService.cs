@@ -108,7 +108,9 @@ namespace RO_Server_Rebuild_2.Services
 
                 ServerRunningChanged?.Invoke(true);
 
-                LogService.Log("API 서버가 시작 되었습니다. Port : " + apiSettings.Port);
+                LogService.Log(
+                    "[API_SERVER][START][SUCCESS] " +
+                    "Port: " + apiSettings.Port);
 
                 return true;
 
@@ -188,7 +190,9 @@ namespace RO_Server_Rebuild_2.Services
 
                     if (!collectStopped)
                     {
-                        LogService.Error("API 서버 정지 과정에서 PLC 통신 정리가 정상적으로 완료되지 않았습니다.");
+                        LogService.Error(
+                            "[API_SERVER][STOP][PLC_CLEANUP_FAIL] " +
+                            "PLC 통신 정리가 정상적으로 완료되지 않았습니다.");
                     }
 
                     // 서버 통신 정지 : 비정상 종료시에도 남은 Listener와 Client까지 정리 
@@ -198,12 +202,14 @@ namespace RO_Server_Rebuild_2.Services
 
                     if (!serverStopped)
                     {
-                        LogService.Error("API 서버 정지에 실패했습니다.");
+                        LogService.Error("[API_SERVER][STOP][FAIL] API 서버 정지에 실패했습니다.");
                     }
 
                     if (collectStopped && serverStopped)
                     {
-                        LogService.Log("PLC 통신과 API 서버가 모두 정지되었습니다.");
+                        LogService.Log(
+                            "[SERVER][STOP][SUCCESS] " +
+                            "PLC 통신과 API 서버가 모두 정지되었습니다.");
                     }
 
                     return collectStopped && serverStopped;
@@ -212,7 +218,7 @@ namespace RO_Server_Rebuild_2.Services
                 catch (Exception ex)
                 {
 
-                    LogService.Error("API 서버 전체 정지 처리 실패 : " + ex.Message);
+                    LogService.Error("[SERVER][STOP][EXCEPTION] " + ex.Message);
 
                     ServerRunningChanged?.Invoke(apiServer.IsRunning);
 

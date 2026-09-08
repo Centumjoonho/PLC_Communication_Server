@@ -49,7 +49,9 @@ namespace RO_Server_Rebuild_2.Api
             
             if(!IsValidApiKey(request.ApiKey))
             {
-                LogService.Error("API Key 불일치 요청 차단 : " + clientIp);
+                LogService.Error(
+                    "[API][AUTH][BLOCK] API Key 불일치 / " +
+                    "ClientIp: " + clientIp);
 
                 return CreateErrorResponse("API Key가 유효하지 않습니다");
             }

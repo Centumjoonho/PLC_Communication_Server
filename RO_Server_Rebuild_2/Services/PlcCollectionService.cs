@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,10 +15,15 @@ namespace RO_Server_Rebuild_2.Services
 {
     public class PlcCollectionService
     {
+        // 병렬 최대 처리 PLC 갯수
         private const int MaxPlcParallelCount = 15;
+        // 실패 제한 수
         private const int FailureLimit = 2;
+        // 실패 시 1초 스킵
         private const int SkipSeconds = 1;
+        // 반복 처리 인터벌 : 1초
         private const int LoopIntervalMs = 1000;
+        // 기본 스킵 메세지
         private const string SkipErrorMessage = "연속 실패로 임시 통신 정지";
 
         private readonly PlcDb plcDb;
@@ -145,6 +151,27 @@ namespace RO_Server_Rebuild_2.Services
                     return false;
                 }
 
+                // 등록 순서를 유지하고 이전 데이터를 제거
+                List<PlcData> initialDataList =
+                    new List<PlcData>();
+
+                foreach (PlcMaster plcMaster in plcMasterList)
+                {
+                    initialDataList.Add(new PlcData
+                    {
+                        PlcCode = plcMaster.PlcCode.Trim(),
+                        PlcName = plcMaster.PlcName,
+                        PlcIp = plcMaster.PlcIp,
+                        PlcPort = plcMaster.PlcPort,
+                        MemoryAddress = plcMaster.MemoryAddress,
+                        ReceiveData = "00000000",
+                        Status = "WAIT",
+                        ReceiveTime = DateTime.Now
+                    });
+                }
+
+                plcDataStore.SetCollectList(initialDataList);
+
                 bool dbSaveStarted = dbSaveService.DBSaveWorkStart();
 
                 if(!dbSaveStarted)
@@ -160,13 +187,23 @@ namespace RO_Server_Rebuild_2.Services
                 //Task 실행하기 전에 실행 상태로 변경
                 SetRunning(true);
 
-                // PLC 반복 수집 Task 시작
-                collectTask = Task.Run(() => CollectLoopAsync(plcMasterList, cancellationToken));
+                // 등록된 PLC마다 독립적인 통신 Task 생성
+                List<Task> plcWorkerTaskList = new List<Task>();
+
+                foreach (PlcMaster plcMaster in plcMasterList)
+                {
+                    Task plcWorkerTask = RunPlcWorkerAsync(plcMaster, cancellationToken);
+
+                    plcWorkerTaskList.Add(plcWorkerTask);
+                }
+
+                // 모든 PLC 작업을 대표하는 Task
+                collectTask =Task.WhenAll(plcWorkerTaskList);
 
                 // 가동시간 계산 Task 시작
                 runRateTask = Task.Run(() => RunRateLoopAsync(cancellationToken));
 
-                LogService.Log("PLC 반복 수집이 시작되었습니다. 대상 : " + plcMasterList.Count + "대");
+                LogService.Log("[PLC_COLLECT][START][SUCCESS] " +"대상: " + plcMasterList.Count + "대");
 
                 return true;
 
@@ -249,7 +286,7 @@ namespace RO_Server_Rebuild_2.Services
                 {
                     taskStopSuccess = false;
 
-                    LogService.Error("PLC 수집 Task 정지 실패 : " + ex.Message);
+                    LogService.Error("[PLC_COLLECT][COLLECT_TASK][STOP][FAIL] " + ex.Message);
                 }
 
                 try
@@ -261,7 +298,7 @@ namespace RO_Server_Rebuild_2.Services
                 {
                     dbStopSuccess = false;
 
-                    LogService.Error("PLC DB 저장 작업 정지 실패 : " + ex.Message);
+                    LogService.Error("[PLC_COLLECT][DB_WORKER][STOP][FAIL] " + ex.Message);
                 }
 
                 lock (stateLock)
@@ -292,7 +329,7 @@ namespace RO_Server_Rebuild_2.Services
 
                 if (taskStopSuccess && dbStopSuccess)
                 {
-                    LogService.Log("PLC 반복 수집이 정지되었습니다.");
+                    LogService.Log("[PLC_COLLECT][STOP][SUCCESS] PLC 반복 수집이 정지되었습니다.");
                 }
 
                 return taskStopSuccess && dbStopSuccess;
@@ -338,6 +375,15 @@ namespace RO_Server_Rebuild_2.Services
                         runRateService.ResetAll();
 
                         return false;
+                    }
+                    // DB에서 읽은 PLC 코드의 앞뒤 공백과 개행을 제거하고
+                    // 대문자로 통일하여 모든 처리에서 같은 Key를 사용
+                    plcMaster.PlcCode = plcMaster.PlcCode.Trim().ToUpperInvariant();
+
+                    // IP에도 불필요한 앞뒤 공백이 있을 수 있으므로 제거
+                    if (!string.IsNullOrWhiteSpace(plcMaster.PlcIp))
+                    {
+                        plcMaster.PlcIp = plcMaster.PlcIp.Trim();
                     }
 
                     // DB에 저장된 해당 PLC의 시간대별 가동초 조회
@@ -392,6 +438,225 @@ namespace RO_Server_Rebuild_2.Services
                 return new List<PlcData>(resultArray);
             }
 
+        }
+        /// <summary>
+        /// PLC 한 대의 연결을 유지하면서 일정 주기로 데이터를 읽고,
+        /// 연결이 끊어지면 해당 PLC만 재연결합니다.
+        /// </summary>
+        private async Task RunPlcWorkerAsync(
+            PlcMaster plcMaster,
+            CancellationToken cancellationToken)
+        {
+            TcpClient client = null;
+
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested &&
+                       collectRunning)
+                {
+                    PlcData plcData;
+
+                    try
+                    {
+                        // 최초 실행 또는 통신 오류 후 연결이 없는 경우
+                        if (client == null)
+                        {
+                            client = await plcReader.ConnectPlcAsync(
+                                plcMaster,
+                                cancellationToken);
+
+                            LogService.Log(
+                                "[PLC][" + plcMaster.PlcCode.Trim() + "]" +
+                                "[CONNECT][SUCCESS] " +
+                                plcMaster.PlcIp + ":" +
+                                plcMaster.PlcPort);
+                        }
+
+                        // 현재 연결된 TcpClient를 사용해 PLC 요청 및 응답 처리
+                        plcData = await plcReader.ReadPlcDataAsync(
+                            plcMaster,
+                            client,
+                            cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                        when (cancellationToken.IsCancellationRequested)
+                    {
+                        // 정지 버튼 또는 프로그램 종료로 취소된 경우
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        // 연결·송신·수신 오류가 발생하면
+                        // 다른 PLC에는 영향을 주지 않고 현재 PLC 연결만 종료
+                        ClosePlcClient(ref client);
+
+                        LogService.Error(
+                            "[PLC][" + plcMaster.PlcCode.Trim() + "]" +
+                            "[COMMUNICATION][FAIL] " +
+                            "[Endpoint:" +
+                            plcMaster.PlcIp + ":" +
+                            plcMaster.PlcPort + "] " +
+                            ex.GetType().Name + " / " +
+                            ex.Message);
+
+                        // 화면과 DB에 전달할 통신 오류 데이터 생성
+                        PlcData errorData = new PlcData
+                        {
+                            PlcCode = plcMaster.PlcCode.Trim(),
+                            PlcName = plcMaster.PlcName,
+                            PlcIp = plcMaster.PlcIp,
+                            PlcPort = plcMaster.PlcPort,
+                            MemoryAddress = plcMaster.MemoryAddress,
+                            ReceiveData = "90000000",
+                            Status = "ERROR",
+                            ReceiveTime = DateTime.Now,
+                            ErrorMessage = ex.Message
+                        };
+
+                        try
+                        {
+                            // 실패 횟수, 오류 상태, DB 저장 조건 처리
+                            ProcessOnePlcData(errorData);
+
+                            // 해당 PLC의 최신 상태를 ERROR로 갱신
+                            plcDataStore.UpdatePlcData(errorData);
+                        }
+                        catch (Exception processException)
+                        {
+                            // 오류 데이터 처리 중 문제가 생겨도
+                            // 현재 PLC Worker 자체는 종료하지 않음
+                            LogService.Error(
+                                "[PLC][" + plcMaster.PlcCode.Trim() + "]" +
+                                "[ERROR_PROCESS][FAIL] " +
+                                processException.GetType().Name + " / " +
+                                processException.Message);
+                        }
+
+                        // 1초 후 while 처음으로 돌아가 해당 PLC 재연결 시도
+                        await Task.Delay(
+                            LoopIntervalMs,
+                            cancellationToken);
+
+                        continue;
+                    }
+
+                    try
+                    {
+                        // PLC 통신에 성공한 이후 가동률과 DB 저장 조건 처리
+                        ProcessOnePlcData(plcData);
+
+                        // 해당 PLC의 최신 정상 데이터 갱신
+                        plcDataStore.UpdatePlcData(plcData);
+                    }
+                    catch (Exception ex)
+                    {
+                        // 데이터 처리 오류는 PLC 통신 오류가 아니므로
+                        // 현재 TCP 연결은 종료하지 않음
+                        LogService.Error(
+                            "[PLC][" + plcMaster.PlcCode.Trim() + "]" +
+                            "[PROCESS][FAIL] " +
+                            ex.GetType().Name + " / " +
+                            ex.Message);
+                    }
+
+                    // 정상 통신 후 다음 통신까지 대기
+                    await Task.Delay(
+                        LoopIntervalMs,
+                        cancellationToken);
+                }
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                // 프로그램 종료 또는 수집 정지 과정에서 발생한 정상 취소
+            }
+            catch (Exception ex)
+            {
+                // 위에서 처리하지 못한 예외로 Worker가 종료되는 경우 기록
+                LogService.Error(
+                    "[PLC][" + plcMaster.PlcCode.Trim() + "]" +
+                    "[WORKER][STOPPED] " +
+                    ex.GetType().Name + " / " +
+                    ex.Message);
+            }
+            finally
+            {
+                // Worker가 어떤 이유로 끝나더라도 현재 PLC 연결 정리
+                ClosePlcClient(ref client);
+            }
+        }
+        // 특정 PLC의 TCP 연결을 안전하게 종료
+        private void ClosePlcClient(ref TcpClient client)
+        {
+            if (client == null)
+            {
+                return;
+            }
+
+            try
+            {
+                client.Close();
+            }
+            catch
+            {
+                // 이미 종료된 연결이면 추가 처리하지 않음
+            }
+
+            client = null;
+        }
+
+        private void ProcessOnePlcData(PlcData plcData)
+        {
+            if (plcData == null ||
+        string.IsNullOrWhiteSpace(plcData.PlcCode))
+            {
+                return;
+            }
+
+            bool statusUpdated =
+                runRateService.UpdatePlcStatus(plcData);
+
+            if (!statusUpdated)
+            {
+                LogService.Error(
+                    "[PLC][" + plcData.PlcCode + "]" +
+                    "[RUN_RATE][STATE_NOT_READY] " +
+                    "가동시간 상태가 초기화되지 않았습니다.");
+            }
+
+            bool saveHistory = false;
+
+            if (string.Equals(
+                plcData.Status,
+                "ERROR",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                saveHistory = ApplyFailurePolicy(plcData);
+            }
+            else
+            {
+                ResetFailureState(plcData.PlcCode);
+            }
+
+            runRateService.ApplyRunRate(plcData);
+
+            DateTime workDate =
+                runRateService.GetWorkDate(plcData.ReceiveTime);
+
+            bool enqueueSuccess =
+                dbSaveService.EnqueueSave(
+                    plcData,
+                    workDate,
+                    true,
+                    saveHistory);
+
+            if (!enqueueSuccess)
+            {
+                LogService.Error(
+                    "[DB][" + plcData.PlcCode + "]" +
+                    "[SAVE_QUEUE][ENQUEUE_FAIL] " +
+                    "DB 저장 요청을 등록하지 못했습니다.");
+            }
         }
 
         // PLC 한 대를 읽고 통신 오류를 ERROR 데이터로 변환
@@ -471,22 +736,15 @@ namespace RO_Server_Rebuild_2.Services
 
             return true;
         }
-        // PLC 통신 오류 횟수를 기록하고 연속 2회 실패 시 1초 스킵 설정
-        // 반환값 true는 이번 오류를 장애 이력으로 저장한다는 의미
+        // PLC별 연속 실패 횟수를 기록하고,
+        // 연속 실패가 기준 횟수에 도달하면 장애 History를 한 번만 저장
         private bool ApplyFailurePolicy(PlcData plcData)
         {
-            if (plcData == null || string.IsNullOrWhiteSpace(plcData.PlcCode))
+            if (plcData == null ||
+                string.IsNullOrWhiteSpace(plcData.PlcCode))
             {
                 return false;
             }
-
-            // 스킵 중에 생성된 ERROR 데이터는 새로운 실패로 계산하지 않음
-            if (string.Equals(plcData.ErrorMessage, SkipErrorMessage, StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            int failureCount;
 
             bool saveHistory = false;
 
@@ -494,48 +752,30 @@ namespace RO_Server_Rebuild_2.Services
             {
                 PlcFailureState failureState;
 
-                if (!failureStates.TryGetValue(plcData.PlcCode, out failureState))
+                if (!failureStates.TryGetValue(plcData.PlcCode,out failureState))
                 {
                     failureState = new PlcFailureState();
 
                     failureStates[plcData.PlcCode] = failureState;
                 }
 
-                failureState.FailureCount++;
-
-                failureCount = failureState.FailureCount;
-
-                if (failureCount >= FailureLimit)
+                // 실패 횟수가 무한히 증가하지 않도록
+                // 장애 확정 기준까지만 증가
+                if (failureState.FailureCount < FailureLimit)
                 {
-                    // 다음 수집부터 설정된 시간 동안 실제 PLC 통신을 건너뜀
-                    failureState.SkipUntil = DateTime.Now.AddSeconds(SkipSeconds);
-
-                    // 스킵 종료 후 다시 실패 횟수를 계산하기 위해 초기화
-                    failureState.FailureCount = 0;
-
-                    // 같은 장애가 계속되는 동안 History는 한 번만 저장
-                    if (!failureState.FailureConfirmed)
-                    {
-                        failureState.FailureConfirmed = true;
-                        saveHistory = true;
-                    }
+                    failureState.FailureCount++;
                 }
-            }
 
-            if (failureCount < FailureLimit)
-            {
-                LogService.Error(
-                    "PLC 통신 실패 : " +
-                    plcData.PlcCode + " / " +
-                    failureCount + "회 / " +
-                    plcData.ErrorMessage);
-            }
-            else
-            {
-                LogService.Error(
-                    "PLC 연속 통신 실패 : " +
-                    plcData.PlcCode + " / " +
-                    SkipSeconds + "초 동안 통신을 건너뜁니다.");
+                // 2회 연속 실패하면 장애로 확정
+                if (failureState.FailureCount >= FailureLimit &&
+                    !failureState.FailureConfirmed)
+                {
+                    failureState.FailureConfirmed = true;
+
+                    // 같은 장애가 지속되는 동안
+                    // History는 최초 한 번만 저장
+                    saveHistory = true;
+                }
             }
 
             return saveHistory;
@@ -569,7 +809,9 @@ namespace RO_Server_Rebuild_2.Services
 
             if (recovered)
             {
-                LogService.Log("PLC 통신 복구 : " + plcCode);
+                LogService.Log(
+                    "[PLC][" + plcCode + "][COMMUNICATION][RECOVERED] " +
+                    "통신이 정상적으로 복구되었습니다.");
             }
         }
 
@@ -595,7 +837,9 @@ namespace RO_Server_Rebuild_2.Services
 
                 if (!statusUpdated)
                 {
-                    LogService.Error(plcData.PlcCode + " PLC 가동시간 상태가 초기화되지 않았습니다.");
+                    LogService.Error(
+                        "[PLC][" + plcData.PlcCode + "][RUN_RATE][STATE_NOT_READY] " +
+                        "가동시간 상태가 초기화되지 않았습니다.");
                 }
 
                 bool saveHistory = false;
@@ -624,7 +868,9 @@ namespace RO_Server_Rebuild_2.Services
 
                 if (!enqueueSuccess)
                 {
-                    LogService.Error(plcData.PlcCode + " PLC DB 저장 요청을 등록하지 못했습니다.");
+                    LogService.Error(
+                        "[DB][" + plcData.PlcCode + "][SAVE_QUEUE][ENQUEUE_FAIL] " +
+                        "DB 저장 요청을 등록하지 못했습니다.");
                 }
 
                 resultList.Add(plcData);
@@ -675,7 +921,7 @@ namespace RO_Server_Rebuild_2.Services
                     catch (Exception ex)
                     {
                         // 화면 갱신 실패가 PLC 반복 수집을 중단시키지 않도록 처리
-                        LogService.Error("PLC 수집 결과 화면 전달 실패 : " + ex.Message);
+                        LogService.Error("[PLC_COLLECT][UI_NOTIFY][FAIL] " + ex.Message);
                     }
 
                     stopwatch.Stop();
@@ -697,7 +943,7 @@ namespace RO_Server_Rebuild_2.Services
             }
             catch (Exception ex)
             {
-                LogService.Error("PLC 반복 수집 중 오류 발생 : " + ex.Message);
+                LogService.Error("[PLC_COLLECT][COLLECT_LOOP][EXCEPTION] " + ex.Message);
 
                 CancellationTokenSource runningTokenSource = null;
                 bool startCleanup = false;
@@ -759,6 +1005,19 @@ namespace RO_Server_Rebuild_2.Services
                         runRateService.CountOneSecond(nextCountTime);
                         nextCountTime = nextCountTime.AddSeconds(1);
                     }
+
+                    // PLC별 최신 데이터 전체 복사
+                    IList<PlcData> snapshot =  plcDataStore.GetCollectList();
+
+                    try
+                    {
+                        // 화면에는 1초에 한 번만 전체 목록 전달
+                        DataChanged?.Invoke(snapshot);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogService.Error("[PLC_COLLECT][UI_NOTIFY][FAIL] " + ex.Message);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -767,7 +1026,7 @@ namespace RO_Server_Rebuild_2.Services
             }
             catch (Exception ex)
             {
-                LogService.Error("PLC 가동시간 계산 중 오류 발생 : " + ex.Message);
+                LogService.Error("[PLC_COLLECT][RUN_RATE_LOOP][EXCEPTION] " + ex.Message);
                
                 CancellationTokenSource runningTokenSource = null;
                 bool startCleanup = false;

@@ -18,26 +18,25 @@ namespace RO_Server_Rebuild_2.UC
         {
             InitializeComponent();
 
-            LogService.MessageLogged += OnMessageLogged;
-
-            Disposed += UC_LogViewer_Disposed;
-
         }
-        //이벤트 구독 해제
-        private void UC_LogViewer_Disposed(object sender, EventArgs e)
-        {
-            LogService.MessageLogged -= OnMessageLogged;
-        }
-
-        private void OnMessageLogged(string message, bool isError)
+        /// <summary>
+        /// 로그를 UI 스레드에서 비동기로 출력
+        /// </summary>
+        public void WriteMessage(string message, bool isError)
         {
             if(IsDisposed || Disposing) return;
 
+            // 백그라운 스레드에서 호출 된 경우 InvokeRequired = true
             if (InvokeRequired)
             {
                 try
                 {
-                    BeginInvoke(new Action(() => OnMessageLogged(message, isError)));
+                    BeginInvoke(new Action(() =>
+                    {
+                        if(IsDisposed || Disposing) return;
+
+                        AppendMessage(message, isError);
+                    }));
 
                 }
                 catch (InvalidOperationException)
@@ -47,35 +46,39 @@ namespace RO_Server_Rebuild_2.UC
                 }
                 return;
             }
+            // UI 스레드에서 호출 된 경우 InvokeRequired = true
             AppendMessage(message, isError);
         }
 
-        private void AppendMessage(string message, bool isError) {
-            
-            RichTextBox target;
+        private void AppendMessage(string message, bool isError)
+        {
+            // 전체 로그에는 정상과 오류 모두 출력
+            AppendText(txtLog, message);
 
+            // 오류 로그에는 오류만 추가 출력
             if (isError)
             {
-                target = txtError;
+                AppendText(txtError, message);
             }
-            else
-            {
-                target =txtLog;
-            }
+        }
 
-            target.AppendText(message +  Environment.NewLine);
+        private void AppendText(RichTextBox target, string message)
+        {
+            target.AppendText(
+                message + Environment.NewLine);
 
             if (target.Lines.Length > 100)
             {
-                string[]lines = target.Lines;
-                target.Lines = lines.Skip(lines.Length-100).ToArray();
-          
+                string[] lines = target.Lines;
+
+                target.Lines =
+                    lines.Skip(lines.Length - 100).ToArray();
             }
-            
-            target.SelectionStart = target.TextLength;
-            
+
+            target.SelectionStart =
+                target.TextLength;
+
             target.ScrollToCaret();
-        
         }
 
         private void btnBack_Click(object sender, EventArgs e)

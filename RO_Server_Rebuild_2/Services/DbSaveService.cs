@@ -133,7 +133,9 @@ namespace RO_Server_Rebuild_2.Services
             // 큐가 많이 쌓이면 로그로 확인
             if (queueCount >= 50 && queueCount % 50 == 0)
             {
-                LogService.Log("DB 저장 대기 건수 증가 : " + queueCount + "건");
+                LogService.Log(
+                    "[DB][SAVE_QUEUE][BACKLOG] " +
+                    "대기: " + queueCount + "건");
             }
 
             return true;
@@ -172,7 +174,7 @@ namespace RO_Server_Rebuild_2.Services
             }
             catch (Exception ex)
             {
-                LogService.Error("DB 저장 Worker 정지 실패 : " + ex.Message);
+                LogService.Error("[DB][SAVE_WORKER][STOP][FAIL] " + ex.Message);
 
                 return false;
             }
@@ -210,7 +212,9 @@ namespace RO_Server_Rebuild_2.Services
                 }
                 catch (Exception ex)
                 {
-                    LogService.Error("PLC 최신 상태 저장 실패 : " + plcCode + " / " + ex.Message);
+                    LogService.Error(
+                        "[DB][" + plcCode + "][LATEST_SAVE][FAIL] " +
+                        ex.Message);
                 }
 
                 // PLC 시간대별 가동초 저장
@@ -223,7 +227,9 @@ namespace RO_Server_Rebuild_2.Services
                 }
                 catch (Exception ex)
                 {
-                    LogService.Error("PLC 가동시간 저장 실패 : " + plcCode + " / " + ex.Message);
+                    LogService.Error(
+                        "[DB][" + plcCode + "][DAILY_SAVE][FAIL] " +
+                        ex.Message);
                 }
 
                 // PLC 통신 장애 이력 저장
@@ -236,7 +242,9 @@ namespace RO_Server_Rebuild_2.Services
                 }
                 catch (Exception ex)
                 {
-                    LogService.Error("PLC 장애 이력 저장 실패 : " + plcCode + " / " + ex.Message);
+                    LogService.Error(
+                        "[DB][" + plcCode + "][HISTORY_SAVE][FAIL] " +
+                        ex.Message);
                 } 
 
             }

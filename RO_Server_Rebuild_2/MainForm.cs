@@ -99,7 +99,7 @@ namespace RO_Server_Rebuild_2
             _serverMainService.CollectRunningChanged += SetPlcCollectRunning;
             _serverMainService.ServerRunningChanged += SetApiServerRunning;
 
-            LogService.Log("통합 로그창이 초기화되었습니다.");
+            LogService.Log("[PROGRAM][LOG_VIEWER][READY] 통합 로그창이 초기화되었습니다.");
 
         }
 
@@ -237,7 +237,7 @@ namespace RO_Server_Rebuild_2
 
             try
             {
-                LogService.Log("프로그램 종료 요청");
+                LogService.Log("[PROGRAM][SHUTDOWN][REQUEST] 프로그램 종료가 요청되었습니다.");
 
                 bool shutdownSuccess = await _serverMainPresenter.ShutdownAsync();
 
@@ -245,7 +245,7 @@ namespace RO_Server_Rebuild_2
 
                     shutdownInProgress = false;
 
-                    LogService.Error("프로그램 종료 준비에 실패했습니다.");
+                    LogService.Error("[PROGRAM][SHUTDOWN][FAIL] 프로그램 종료 준비에 실패했습니다.");
 
                     return;
                 }
@@ -259,7 +259,7 @@ namespace RO_Server_Rebuild_2
 
                 shutdownInProgress = false;
 
-                LogService.Error("프로그램 종료 처리 실패 : " + ex.Message);
+                LogService.Error("[PROGRAM][SHUTDOWN][EXCEPTION] " + ex.Message);
             }
                 
         }

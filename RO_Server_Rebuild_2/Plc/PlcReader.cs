@@ -15,7 +15,7 @@ namespace RO_Server_Rebuild_2.Plc
         // 네트워크 상황에 따라 조정 가능  PLC 연결, 읽기, 쓰기 시간 초과를 총 1초로 설정
         private const int PlcConnectTimeoutMs = 300;
         private const int PlcWriteTimeoutMs = 300;
-        private const int PlcReadTimeoutMs = 400;
+        private const int PlcReadTimeoutMs = 1000;
 
         // 현재 PLC Frame에서 읽는 Register 개수
         private const int RegisterCount = 2;
@@ -23,6 +23,112 @@ namespace RO_Server_Rebuild_2.Plc
         // Register 2개이므로 응답 데이터는 4바이트
         private const int ExpectedDataByteCount = RegisterCount * 2;
 
+        // PLC 와 TCP 연결을 생성 
+        public async Task<TcpClient> ConnectPlcAsync(PlcMaster master , CancellationToken cancellationToken) 
+        {
+
+            if (master == null)
+            {
+                throw new ArgumentNullException(nameof(master));
+            }
+
+            if (string.IsNullOrWhiteSpace(master.PlcIp))
+            {
+                throw new ArgumentException(
+                    "PLC IP가 없습니다.",
+                    nameof(master));
+            }
+
+            if (master.PlcPort <= 0 ||
+                master.PlcPort > 65535)
+            {
+                throw new ArgumentException(
+                    "PLC Port가 올바르지 않습니다.",
+                    nameof(master));
+            }
+
+            TcpClient client = new TcpClient();
+
+            try
+            {
+                Task connectTask = client.ConnectAsync(master.PlcIp, master.PlcPort);
+
+                Task timeoutTask = Task.Delay(PlcConnectTimeoutMs, cancellationToken);
+
+                if(await Task.WhenAny(connectTask, timeoutTask) != connectTask)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    throw new TimeoutException("PLC 연결 시간이 초과되었습니다.");
+                }
+
+                await connectTask;
+
+                return client;
+            }
+            catch 
+            {
+                client.Close();
+                throw;
+            }
+
+        }
+        // 이미 연결된 TcpClient를 이용하여 Modbus 읽기 요청을 보내고 PLC 응답을 받음
+        public async Task<PlcData> ReadPlcDataAsync( PlcMaster plcMaster, TcpClient client , CancellationToken cancellationToken)
+        {
+            if(plcMaster == null)
+            {
+                throw new ArgumentNullException(nameof(plcMaster));
+            }
+            if(client == null)
+            {
+                throw new ArgumentNullException(nameof(client));
+            }
+            if (!client.Connected)
+            {
+                throw new InvalidOperationException("PLC가 연결되어 있지 않습니다.");
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // PLC에 보낼 Modbus TCP 읽기 요청 생성
+            byte[] frame = MakeReadFrame(plcMaster);
+
+            // 연결할때 생성한 TcpClient의 통신 Stream 사용 
+            NetworkStream stream = client.GetStream();
+
+            // 읽기 요청 프레임 전송
+            Task writeTask = stream.WriteAsync(frame, 0, frame.Length, cancellationToken);
+            Task writeTimeoutTask = Task.Delay(PlcWriteTimeoutMs, cancellationToken);
+
+
+            if (await Task.WhenAny(writeTask, writeTimeoutTask) != writeTask)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                throw new TimeoutException("PLC 쓰기 시간이 초과되었습니다.");
+            }
+            
+            await writeTask;
+
+            byte[] buffer = new byte[260];
+
+            //Header와 Data를 모두 받는데 적용할 제한시간 
+            Task readTimeOutTask = Task.Delay(PlcReadTimeoutMs, cancellationToken);
+
+            // MBAP Header 7바이트 + Function Code 1바이트 + Byte Count 1바이트
+            int totalLength = await ReadExactAsync(stream, buffer, 0, 9, readTimeOutTask, cancellationToken);
+
+            // Function Code와 데이터 길이 확인
+            int dataByteCount = ValidateResponseHeader(buffer, totalLength);
+
+            // 실제로 받아야 하는 전체 응답 길이
+            int requiredLength = 9 + dataByteCount;
+
+            // Header 이후의 실제 데이터 수신
+            totalLength = await ReadExactAsync(stream, buffer, totalLength, requiredLength, readTimeOutTask, cancellationToken);
+
+            return MakeData(plcMaster, buffer, totalLength);
+        }
+        
         // PLC 데이터를 읽는 메서드
         public async Task<PlcData> ReadPlcData(PlcMaster master , CancellationToken cancellationToken = default(CancellationToken))
         {
@@ -74,8 +180,6 @@ namespace RO_Server_Rebuild_2.Plc
                     }
                     // WriteAsync 내부 예외 확인
                     await writeTask;
-
-                   
 
                     byte[] buffer = new byte[260];
 

@@ -59,7 +59,7 @@ namespace RO_Server_Rebuild_2.Presenters
             }
             catch (Exception ex)
             {
-                LogService.Error("API 설정 적용 처리 실패 : " + ex.Message);
+                LogService.Error("[API_SETTING][APPLY][EXCEPTION] " + ex.Message);
             }
             finally
             {
@@ -99,7 +99,7 @@ namespace RO_Server_Rebuild_2.Presenters
             }
             catch (Exception ex)
             {
-                LogService.Error("API 설정 입력 확인 실패 :" + ex.Message);
+                LogService.Error("[API_SETTING][VALIDATE][EXCEPTION] " + ex.Message);
             }
             finally
             {

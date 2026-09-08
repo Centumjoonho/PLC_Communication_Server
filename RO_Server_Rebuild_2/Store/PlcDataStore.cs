@@ -1,4 +1,5 @@
 ﻿using RO_Server_Rebuild_2.Models;
+using System;
 using System.Collections.Generic;
 
 namespace RO_Server_Rebuild_2.Store
@@ -62,6 +63,34 @@ namespace RO_Server_Rebuild_2.Store
                 HourSeconds = source.HourSeconds == null ? new int[24] : (int[])source.HourSeconds.Clone(),
                 ErrorMessage = source.ErrorMessage
             };
+        }
+
+        internal void UpdatePlcData(PlcData plcData)
+        {
+            if (plcData == null || string.IsNullOrWhiteSpace(plcData.PlcCode))
+            {
+                return;
+            }
+
+            PlcData copiedData = CopyPlcData(plcData);
+
+            lock (dataLock)
+            {
+                int index = collectList.FindIndex(data =>
+                    string.Equals(
+                        data.PlcCode,
+                        plcData.PlcCode,
+                        StringComparison.OrdinalIgnoreCase));
+
+                if (index >= 0)
+                {
+                    collectList[index] = copiedData;
+                }
+                else
+                {
+                    collectList.Add(copiedData);
+                }
+            }
         }
     }
 }

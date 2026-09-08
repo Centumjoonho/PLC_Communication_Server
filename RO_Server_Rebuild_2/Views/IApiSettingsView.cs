@@ -13,7 +13,6 @@ namespace RO_Server_Rebuild_2.Views
         event EventHandler ApiApplyRequested;
 
         bool TryGetApiSettings(out ApiSettings apiSettings, out string errorMessage);
-
         void ShowApiSettings(ApiSettings apiSettings);
         void ShowInfo(string message);
         void ShowError(string message);

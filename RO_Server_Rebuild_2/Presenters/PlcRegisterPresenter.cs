@@ -68,7 +68,9 @@ namespace RO_Server_Rebuild_2.Presenters
             }
             catch (Exception ex)
             {
-                LogService.Error("PLC  정보 삭제 처리 실패: "+ex.Message);
+                LogService.Error(
+                    "[PLC_SETTING][" + plcCode + "][DELETE][EXCEPTION] " +
+                    ex.Message);
             }
             finally { prView.SetOperationEnabled(true); }
 
@@ -106,7 +108,7 @@ namespace RO_Server_Rebuild_2.Presenters
             }
             catch (Exception ex)
             {
-                LogService.Error("PLC 정보 저장 처리 실패:" + ex.Message);
+                LogService.Error("[PLC_SETTING][SAVE][EXCEPTION] " + ex.Message);
             }
             finally
             {
@@ -130,7 +132,7 @@ namespace RO_Server_Rebuild_2.Presenters
             }
             catch (Exception ex)
             {
-                LogService.Error("PLC 목록 조회 실패" +ex.Message);  
+                LogService.Error("[PLC_SETTING][LIST_READ][EXCEPTION] " + ex.Message);
             }
             finally { prView.SetOperationEnabled(true);}
         }

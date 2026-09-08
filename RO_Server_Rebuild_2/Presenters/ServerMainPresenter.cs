@@ -54,7 +54,7 @@ namespace RO_Server_Rebuild_2.Presenters
                     
                     if (!stopped) {
 
-                        LogService.Error("서버 전체 정리 처리에 실패했습니다.");
+                        LogService.Error("[SERVER][TOGGLE][STOP][FAIL] 서버 전체 정리 처리에 실패했습니다.");
                     }
 
                     return;
@@ -67,14 +67,14 @@ namespace RO_Server_Rebuild_2.Presenters
 
                     if (!started)
                     {
-                        LogService.Error(errorMessage);
+                        LogService.Error("[SERVER][TOGGLE][START][FAIL] " + errorMessage);
                     }
                 }
             }
             catch (Exception ex)
             {
 
-                LogService.Error("서버 시작 / 정지 처리 실패 : " + ex.Message);
+                LogService.Error("[SERVER][TOGGLE][EXCEPTION] " + ex.Message);
 
             }
             finally
@@ -115,7 +115,7 @@ namespace RO_Server_Rebuild_2.Presenters
                     
                     if (!stopped)
                     {
-                        LogService.Error("PLC 반복 수집 정리에 실패했습니다.");
+                        LogService.Error("[PLC_COLLECT][TOGGLE][STOP][FAIL] PLC 반복 수집 정리에 실패했습니다.");
                     }
 
                     return;
@@ -127,14 +127,14 @@ namespace RO_Server_Rebuild_2.Presenters
 
                 if (!started) 
                 {
-                    LogService.Error(errorMessage);
+                    LogService.Error("[PLC_COLLECT][TOGGLE][START][FAIL] " + errorMessage);
                 }
 
             }
             catch (Exception ex)
             {
 
-                LogService.Error("PLC 반복 수집 처리 실패 : " + ex.Message);
+                LogService.Error("[PLC_COLLECT][TOGGLE][EXCEPTION] " + ex.Message);
             }
             finally {
                 toggleOperationRunning = false;
