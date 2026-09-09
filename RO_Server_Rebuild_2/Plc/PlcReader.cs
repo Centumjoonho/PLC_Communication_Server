@@ -13,8 +13,8 @@ namespace RO_Server_Rebuild_2.Plc
     public class PlcReader
     {
         // 네트워크 상황에 따라 조정 가능  PLC 연결, 읽기, 쓰기 시간 초과를 총 1초로 설정
-        private const int PlcConnectTimeoutMs = 300;
-        private const int PlcWriteTimeoutMs = 300;
+        private const int PlcConnectTimeoutMs = 1000;
+        private const int PlcWriteTimeoutMs = 1000;
         private const int PlcReadTimeoutMs = 1000;
 
         // 현재 PLC Frame에서 읽는 Register 개수
@@ -34,17 +34,12 @@ namespace RO_Server_Rebuild_2.Plc
 
             if (string.IsNullOrWhiteSpace(master.PlcIp))
             {
-                throw new ArgumentException(
-                    "PLC IP가 없습니다.",
-                    nameof(master));
+                throw new ArgumentException("PLC IP가 없습니다.", nameof(master));
             }
 
-            if (master.PlcPort <= 0 ||
-                master.PlcPort > 65535)
+            if (master.PlcPort <= 0 || master.PlcPort > 65535)
             {
-                throw new ArgumentException(
-                    "PLC Port가 올바르지 않습니다.",
-                    nameof(master));
+                throw new ArgumentException("PLC Port가 올바르지 않습니다.", nameof(master));
             }
 
             TcpClient client = new TcpClient();
@@ -69,6 +64,7 @@ namespace RO_Server_Rebuild_2.Plc
             catch 
             {
                 client.Close();
+
                 throw;
             }
 
@@ -98,12 +94,14 @@ namespace RO_Server_Rebuild_2.Plc
 
             // 읽기 요청 프레임 전송
             Task writeTask = stream.WriteAsync(frame, 0, frame.Length, cancellationToken);
+
             Task writeTimeoutTask = Task.Delay(PlcWriteTimeoutMs, cancellationToken);
 
 
             if (await Task.WhenAny(writeTask, writeTimeoutTask) != writeTask)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
                 throw new TimeoutException("PLC 쓰기 시간이 초과되었습니다.");
             }
             
@@ -221,7 +219,9 @@ namespace RO_Server_Rebuild_2.Plc
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    throw new TimeoutException("PLC 응답 전체를 읽는 시간이 초과되었습니다.");
+                    // 응답을 몇 바이트까지 받았는지 함께 기록하여
+                    // Header 미수신인지 Data 미수신인지 구분
+                    throw new TimeoutException("PLC 응답 수신 시간이 초과되었습니다. " +"[Received:" + totalLength +"/" + requiredLength + "bytes]");
                 }
 
                 int readLength = await readTask;

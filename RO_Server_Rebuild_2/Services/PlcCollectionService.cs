@@ -91,6 +91,11 @@ namespace RO_Server_Rebuild_2.Services
             this.runRateService = runRateService;
             this.dbSaveService = dbSaveService;
             this.plcDataStore = plcDataStore;
+            this.runRateService.WorkDateClosing += (data, date) =>
+            {
+                if (!this.dbSaveService.EnqueueDaily(data, date))
+                    throw new InvalidOperationException("이전 영업일 최종 가동시간을 접수하지 못했습니다.");
+            };
         }
         public bool StartCollect(out string errorMessage)
         {/*
@@ -192,7 +197,7 @@ namespace RO_Server_Rebuild_2.Services
 
                 foreach (PlcMaster plcMaster in plcMasterList)
                 {
-                    Task plcWorkerTask = RunPlcWorkerAsync(plcMaster, cancellationToken);
+                    Task plcWorkerTask = Task.Run(() => RunPlcWorkerAsync(plcMaster, cancellationToken));
 
                     plcWorkerTaskList.Add(plcWorkerTask);
                 }
@@ -234,7 +239,8 @@ namespace RO_Server_Rebuild_2.Services
                     bool runRateTaskCompleted = runRateTask == null || runRateTask.IsCompleted;
 
                     // 모든 작업이 이미 정지된 상태
-                    if (cancellationTokenSource == null && collectTaskCompleted && runRateTaskCompleted && !dbSaveService.IsRunning())
+                    if (cancellationTokenSource == null && collectTaskCompleted && runRateTaskCompleted &&
+                        !dbSaveService.IsRunning() && !dbSaveService.HasUnpersistedData())
                     {
                         SetRunning(false);
 
@@ -291,7 +297,17 @@ namespace RO_Server_Rebuild_2.Services
 
                 try
                 {
-                    // 신규 DB 저장 요청을 막고 남아 있는 저장 작업 완료 대기
+                    // 계산/통신 Task 종료 후 마지막 누적값을 인계한다.
+                    if (dbSaveService.IsRunning())
+                    {
+                        foreach (PlcData finalData in plcDataStore.GetCollectList())
+                        {
+                            DateTime finalDate = runRateService.ApplyRunRateAndGetWorkDate(finalData);
+                            if (!dbSaveService.EnqueueDaily(finalData, finalDate))
+                                taskStopSuccess = false;
+                        }
+                    }
+                    // DB 장애 시에는 로컬 미전송 파일을 남기고 종료.
                     dbStopSuccess = await dbSaveService.DBSaveWorkStopAsync();
                 }
                 catch (Exception ex)
@@ -388,6 +404,8 @@ namespace RO_Server_Rebuild_2.Services
 
                     // DB에 저장된 해당 PLC의 시간대별 가동초 조회
                     int[] savedHourSeconds = plcDb.ReadTodaySeconds(plcMaster.PlcCode, workDate);
+                    savedHourSeconds = dbSaveService.RestorePendingDaily(
+                        plcMaster.PlcCode, workDate, savedHourSeconds);
 
                     // 통신 시작 시 DB 가동초를 기준으로 계산 상태 설정
                     runRateService.ResetPlcRunTime(plcMaster.PlcCode, now, savedHourSeconds);
@@ -638,10 +656,7 @@ namespace RO_Server_Rebuild_2.Services
                 ResetFailureState(plcData.PlcCode);
             }
 
-            runRateService.ApplyRunRate(plcData);
-
-            DateTime workDate =
-                runRateService.GetWorkDate(plcData.ReceiveTime);
+            DateTime workDate = runRateService.ApplyRunRateAndGetWorkDate(plcData);
 
             bool enqueueSuccess =
                 dbSaveService.EnqueueSave(
@@ -649,6 +664,11 @@ namespace RO_Server_Rebuild_2.Services
                     workDate,
                     true,
                     saveHistory);
+
+            if (enqueueSuccess && saveHistory)
+            {
+                MarkHistoryAccepted(plcData.PlcCode);
+            }
 
             if (!enqueueSuccess)
             {
@@ -770,7 +790,7 @@ namespace RO_Server_Rebuild_2.Services
                 if (failureState.FailureCount >= FailureLimit &&
                     !failureState.FailureConfirmed)
                 {
-                    failureState.FailureConfirmed = true;
+                    // 저장 서비스 접수 성공 후 MarkHistoryAccepted에서 표시.
 
                     // 같은 장애가 지속되는 동안
                     // History는 최초 한 번만 저장
@@ -779,6 +799,16 @@ namespace RO_Server_Rebuild_2.Services
             }
 
             return saveHistory;
+        }
+
+        private void MarkHistoryAccepted(string plcCode)
+        {
+            lock (failureStateLock)
+            {
+                PlcFailureState state;
+                if (failureStates.TryGetValue(plcCode, out state))
+                    state.FailureConfirmed = true;
+            }
         }
 
         //  정상 통신 복구 처리
@@ -818,64 +848,14 @@ namespace RO_Server_Rebuild_2.Services
         // 한 차례 읽은 PLC 결과에 가동률과 DB 저장 조건 적용
         private IList<PlcData> ProcessCollectedData(IList<PlcData> readDataList)
         {
-            List<PlcData> resultList = new List<PlcData>();
-
-            if (readDataList == null)
-            {
-                return resultList;
-            }
-
+            var resultList = new List<PlcData>();
+            if (readDataList == null) return resultList;
             foreach (PlcData plcData in readDataList)
             {
-                if (plcData == null || string.IsNullOrWhiteSpace(plcData.PlcCode))
-                {
-                    continue;
-                }
-
-                // 현재 RUN, STOP, ERROR 상태 갱신
-                bool statusUpdated = runRateService.UpdatePlcStatus(plcData);
-
-                if (!statusUpdated)
-                {
-                    LogService.Error(
-                        "[PLC][" + plcData.PlcCode + "][RUN_RATE][STATE_NOT_READY] " +
-                        "가동시간 상태가 초기화되지 않았습니다.");
-                }
-
-                bool saveHistory = false;
-
-                if (string.Equals(plcData.Status, "ERROR", StringComparison.OrdinalIgnoreCase))
-                {
-                    saveHistory = ApplyFailurePolicy(plcData);
-                }
-                else
-                {
-                    ResetFailureState(plcData.PlcCode);
-                }
-
-                // 현재 시간대별 가동초, 전체 가동초, 가동률 적용
-                runRateService.ApplyRunRate(plcData);
-
-                DateTime workDate = runRateService.GetWorkDate(plcData.ReceiveTime);
-
-                // Latest와 Daily는 항상 저장
-                // History는 장애가 최초 확정된 경우에만 저장
-                bool enqueueSuccess = dbSaveService.EnqueueSave(
-                    plcData,
-                    workDate,
-                    true,
-                    saveHistory);
-
-                if (!enqueueSuccess)
-                {
-                    LogService.Error(
-                        "[DB][" + plcData.PlcCode + "][SAVE_QUEUE][ENQUEUE_FAIL] " +
-                        "DB 저장 요청을 등록하지 못했습니다.");
-                }
-
+                if (plcData == null || string.IsNullOrWhiteSpace(plcData.PlcCode)) continue;
+                ProcessOnePlcData(plcData);
                 resultList.Add(plcData);
             }
-
             return resultList;
         }
 

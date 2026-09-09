@@ -25,6 +25,9 @@ namespace RO_Server_Rebuild_2.Services
         // PLC별 마지막으로 확인된 현재 상태
         private readonly Dictionary<string, string> currentStatuses = new Dictionary<string, string>();
 
+        // 누적값 초기화 전에 이전 영업일을 저장 서비스에 인계.
+        public event Action<PlcData, DateTime> WorkDateClosing;
+
         // 오전 8시를 기준으로 영업일 계산
         public DateTime GetWorkDate(DateTime dateTime)
         {
@@ -120,6 +123,14 @@ namespace RO_Server_Rebuild_2.Services
                     // 오전 8시가 지나 새로운 영업일이 시작된 경우
                     if (workDates[plcCode] != currentWorkDate)
                     {
+                        var finalData = new PlcData
+                        {
+                            PlcCode = plcCode,
+                            ReceiveTime = now.AddTicks(-1)
+                        };
+                        SetResult(finalData, hourRunSecondsMap[plcCode]);
+                        WorkDateClosing?.Invoke(finalData, workDates[plcCode]);
+
                         workDates[plcCode] = currentWorkDate;
                         hourRunSecondsMap[plcCode] = new int[HourCount];
                     }
@@ -169,6 +180,22 @@ namespace RO_Server_Rebuild_2.Services
                 }
 
                 SetResult(data, hourSeconds);
+            }
+        }
+
+        // 날짜와 누적 배열을 같은 lock 안에서 복사하여 08시 경계 혼합 방지.
+        public DateTime ApplyRunRateAndGetWorkDate(PlcData data)
+        {
+            if (data == null) throw new ArgumentNullException(nameof(data));
+            lock (stateLock)
+            {
+                int[] hours;
+                DateTime date;
+                if (!hourRunSecondsMap.TryGetValue(data.PlcCode, out hours) ||
+                    !workDates.TryGetValue(data.PlcCode, out date))
+                    throw new InvalidOperationException("PLC 가동시간이 초기화되지 않았습니다.");
+                SetResult(data, hours);
+                return date;
             }
         }
 

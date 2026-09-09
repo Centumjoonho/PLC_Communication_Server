@@ -170,13 +170,13 @@ namespace RO_Server_Rebuild_2.Database
             VALUES
             (@plc_code, @plc_name, @receive_data, @status_text, @total_seconds, @rate, @receive_time, @client_ip)
             ON DUPLICATE KEY UPDATE
-              plc_name=VALUES(plc_name),
-              receive_data=VALUES(receive_data),
-              status_text=VALUES(status_text),
-              total_seconds=VALUES(total_seconds),
-              rate=VALUES(rate),
-              receive_time=VALUES(receive_time),
-              client_ip=VALUES(client_ip);";
+              plc_name=IF(receive_time IS NULL OR @receive_time >= receive_time, VALUES(plc_name), plc_name),
+              receive_data=IF(receive_time IS NULL OR @receive_time >= receive_time, VALUES(receive_data), receive_data),
+              status_text=IF(receive_time IS NULL OR @receive_time >= receive_time, VALUES(status_text), status_text),
+              total_seconds=IF(receive_time IS NULL OR @receive_time >= receive_time, VALUES(total_seconds), total_seconds),
+              rate=IF(receive_time IS NULL OR @receive_time >= receive_time, VALUES(rate), rate),
+              client_ip=IF(receive_time IS NULL OR @receive_time >= receive_time, VALUES(client_ip), client_ip),
+              receive_time=IF(receive_time IS NULL OR @receive_time >= receive_time, @receive_time, receive_time);";
 
 
         private const string SqlSaveDaily = @"
@@ -195,39 +195,40 @@ namespace RO_Server_Rebuild_2.Database
              @hat_18, @hat_19, @hat_20, @hat_21, @hat_22, @hat_23,
              @receive_time)
             ON DUPLICATE KEY UPDATE
-              total_seconds=VALUES(total_seconds),
-              hat_00=VALUES(hat_00),
-              hat_01=VALUES(hat_01),
-              hat_02=VALUES(hat_02),
-              hat_03=VALUES(hat_03),
-              hat_04=VALUES(hat_04),
-              hat_05=VALUES(hat_05),
-              hat_06=VALUES(hat_06),
-              hat_07=VALUES(hat_07),
-              hat_08=VALUES(hat_08),
-              hat_09=VALUES(hat_09),
-              hat_10=VALUES(hat_10),
-              hat_11=VALUES(hat_11),
-              hat_12=VALUES(hat_12),
-              hat_13=VALUES(hat_13),
-              hat_14=VALUES(hat_14),
-              hat_15=VALUES(hat_15),
-              hat_16=VALUES(hat_16),
-              hat_17=VALUES(hat_17),
-              hat_18=VALUES(hat_18),
-              hat_19=VALUES(hat_19),
-              hat_20=VALUES(hat_20),
-              hat_21=VALUES(hat_21),
-              hat_22=VALUES(hat_22),
-              hat_23=VALUES(hat_23),
-              receive_time=VALUES(receive_time);";
+              total_seconds=GREATEST(total_seconds, VALUES(total_seconds)),
+              hat_00=GREATEST(hat_00, VALUES(hat_00)),
+              hat_01=GREATEST(hat_01, VALUES(hat_01)),
+              hat_02=GREATEST(hat_02, VALUES(hat_02)),
+              hat_03=GREATEST(hat_03, VALUES(hat_03)),
+              hat_04=GREATEST(hat_04, VALUES(hat_04)),
+              hat_05=GREATEST(hat_05, VALUES(hat_05)),
+              hat_06=GREATEST(hat_06, VALUES(hat_06)),
+              hat_07=GREATEST(hat_07, VALUES(hat_07)),
+              hat_08=GREATEST(hat_08, VALUES(hat_08)),
+              hat_09=GREATEST(hat_09, VALUES(hat_09)),
+              hat_10=GREATEST(hat_10, VALUES(hat_10)),
+              hat_11=GREATEST(hat_11, VALUES(hat_11)),
+              hat_12=GREATEST(hat_12, VALUES(hat_12)),
+              hat_13=GREATEST(hat_13, VALUES(hat_13)),
+              hat_14=GREATEST(hat_14, VALUES(hat_14)),
+              hat_15=GREATEST(hat_15, VALUES(hat_15)),
+              hat_16=GREATEST(hat_16, VALUES(hat_16)),
+              hat_17=GREATEST(hat_17, VALUES(hat_17)),
+              hat_18=GREATEST(hat_18, VALUES(hat_18)),
+              hat_19=GREATEST(hat_19, VALUES(hat_19)),
+              hat_20=GREATEST(hat_20, VALUES(hat_20)),
+              hat_21=GREATEST(hat_21, VALUES(hat_21)),
+              hat_22=GREATEST(hat_22, VALUES(hat_22)),
+              hat_23=GREATEST(hat_23, VALUES(hat_23)),
+              receive_time=IF(receive_time IS NULL OR @receive_time >= receive_time, @receive_time, receive_time);";
 
 
         private const string SqlSaveHistory = @"
-            INSERT IGNORE INTO ro_plc_history
+            INSERT INTO ro_plc_history
             (message_id, plc_code, receive_data, total_seconds, rate, raw_frame, receive_time)
             VALUES
-            (@message_id, @plc_code, @receive_data, @total_seconds, @rate, @raw_frame, @receive_time);";
+            (@message_id, @plc_code, @receive_data, @total_seconds, @rate, @raw_frame, @receive_time)
+            ON DUPLICATE KEY UPDATE message_id=@message_id;";
 
 
         private const string SqlReadLatestList = @"
@@ -246,6 +247,17 @@ namespace RO_Server_Rebuild_2.Database
             FROM ro_operation_daily
             WHERE plc_code=@plc_code
               AND work_date=@work_date";
+
+        // 비밀번호를 포함하지 않는 로컬 미전송 보관함의 DB 대상 식별자.
+        internal string GetSaveStoreIdentity()
+        {
+            using (MySqlConnection connection = CreateConnection())
+            {
+                var builder = new MySqlConnectionStringBuilder(connection.ConnectionString);
+                return builder.Server.ToLowerInvariant() + "|" + builder.Port +
+                    "|" + builder.Database + "|" + builder.UserID;
+            }
+        }
 
         // PLC 최신 상태 저장
         public void SaveLatest(PlcData data)
@@ -306,8 +318,17 @@ namespace RO_Server_Rebuild_2.Database
         }
 
         // PLC 장애 이력 저장
+        // 기존 호출자 호환. 재시도하는 Worker는 아래 고정 ID 오버로드 사용.
         public void SaveHistory(PlcData data)
         {
+            SaveHistory(data, Guid.NewGuid().ToString("N"));
+        }
+
+        public void SaveHistory(PlcData data, string messageId)
+        {
+            Guid parsed;
+            if (!Guid.TryParseExact(messageId, "N", out parsed))
+                throw new ArgumentException("올바른 이력 ID가 필요합니다.", nameof(messageId));
             if (data == null)
             {
                 throw new ArgumentNullException(nameof(data));
@@ -316,7 +337,7 @@ namespace RO_Server_Rebuild_2.Database
             using (MySqlConnection conn = CreateConnection())
             using (MySqlCommand cmd = new MySqlCommand(SqlSaveHistory, conn))
             {
-                cmd.Parameters.AddWithValue("@message_id", Guid.NewGuid().ToString("N"));
+                cmd.Parameters.AddWithValue("@message_id", messageId);
                 cmd.Parameters.AddWithValue("@plc_code", data.PlcCode);
                 cmd.Parameters.AddWithValue("@receive_data", data.ReceiveData);
                 cmd.Parameters.AddWithValue("@total_seconds", data.TotalSeconds);
